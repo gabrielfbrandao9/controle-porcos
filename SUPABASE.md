@@ -38,7 +38,7 @@ vê a mensagem "ainda não tem acesso".
 | Tabela | O que guarda |
 |--------|--------------|
 | `porcos_animais` | Cada animal: categoria, nascimento, chegada, compra, saída (venda, abate ou morte), foto |
-| `porcos_gestacoes` | Cruzamento, parto (ou previsão), nascidos, machos/fêmeas, mortos e capação de cada matriz |
+| `porcos_gestacoes` | Cruzamento, parto (em branco = previsão de 114 dias), vivos, mortos, machos/fêmeas e capação de cada matriz |
 | `porcos_produtos` | Vacinas e remédios e de quantos em quantos dias repetir |
 | `porcos_aplicacoes` | Cada aplicação, num animal ou nas crias de uma gestação |
 | `porcos_abates` | Carne, toucinho e valor de cada abate |

@@ -143,9 +143,10 @@ create table if not exists public.porcos_gestacoes (
   id uuid primary key default gen_random_uuid(),
   matriz_id uuid not null references public.porcos_animais (id) on delete cascade,
   cruzamento date not null,
-  -- data do parto; se ainda não nasceu, é a previsão
+  -- data do parto; em branco = previsto para o cruzamento + 114 dias (calculado pelo site)
   parto date,
-  nascidos int check (nascidos >= 0),
+  -- leitões vivos e mortos no parto (vivos em branco = ainda não nasceu); nascidos = vivos + mortos
+  vivos int check (vivos >= 0),
   machos int check (machos >= 0),
   femeas int check (femeas >= 0),
   mortos int check (mortos >= 0),
@@ -155,6 +156,16 @@ create table if not exists public.porcos_gestacoes (
   atualizado_em timestamptz not null default now(),
   atualizado_por uuid default auth.uid() references auth.users (id) on delete set null
 );
+
+-- Para quem criou a tabela quando a coluna se chamava "nascidos"
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'porcos_gestacoes' and column_name = 'nascidos') then
+    alter table public.porcos_gestacoes rename column nascidos to vivos;
+  end if;
+end;
+$$;
 create index if not exists porcos_gestacoes_matriz_idx on public.porcos_gestacoes (matriz_id);
 
 -- Remédios e vacinas (Ferro, Verme, Suiven, Megabov, Isocox...)

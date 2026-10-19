@@ -112,11 +112,14 @@
   }
 
   const numeroGestacao = (g) => gestacoesDe(g.matriz_id).findIndex((x) => x.id === g.id) + 1;
+  // Sem data de parto registrada, o parto previsto é o cruzamento + 114 dias
   const partoDe = (g) => g.parto || addDays(g.cruzamento, GESTACAO_DIAS);
+  // Nascidos = vivos + mortos (null enquanto não nasceu)
+  const nascidosDe = (g) => (g.vivos == null ? null : g.vivos + (g.mortos || 0));
 
   // 'nascida', 'prevista' (parto ainda não chegou) ou 'pendente' (data passou e falta registrar)
   function situacaoGestacao(g) {
-    if (g.nascidos != null) return 'nascida';
+    if (g.vivos != null) return 'nascida';
     return daysUntil(partoDe(g)) >= 0 ? 'prevista' : 'pendente';
   }
 
@@ -296,15 +299,16 @@
     const futuras = sortByDate(db.gestacoes.filter((g) => situacaoGestacao(g) !== 'nascida').map((g) => ({ g, parto: partoDe(g) })), 'parto');
     const prox = futuras.find((x) => daysUntil(x.parto) >= 0);
     const ano = String(new Date().getFullYear());
-    const doAno = db.gestacoes.filter((g) => g.nascidos != null && partoDe(g).startsWith(ano));
-    const nascidos = doAno.reduce((s, g) => s + g.nascidos, 0);
+    const doAno = db.gestacoes.filter((g) => g.vivos != null && partoDe(g).startsWith(ano));
+    const nascidos = doAno.reduce((s, g) => s + nascidosDe(g), 0);
+    const vivos = doAno.reduce((s, g) => s + g.vivos, 0);
     const mortos = doAno.reduce((s, g) => s + (g.mortos || 0), 0);
     const fin = totaisFinancas(db.lancamentos);
 
     const stats = `<div class="stats">
       ${stat('No plantel', plantel.length, esc(resumoPlantel(plantel)) || 'Nenhum animal')}
       ${stat('Próximo parto', prox ? esc(fmtDate(prox.parto)) : '—', prox ? `${esc(nomeAnimal(prox.g.matriz_id))} · ${esc(fmtRelative(prox.parto))}` : 'Nenhum previsto')}
-      ${stat(`Nascidos em ${ano}`, nascidos, doAno.length ? `${plural(doAno.length, 'parto', 'partos')} · ${plural(mortos, 'morto', 'mortos')}` : 'Nenhum parto ainda')}
+      ${stat(`Nascidos em ${ano}`, nascidos, doAno.length ? `${plural(vivos, 'vivo', 'vivos')} · ${plural(mortos, 'morto', 'mortos')} · ${plural(doAno.length, 'parto', 'partos')}` : 'Nenhum parto ainda')}
       ${stat('Saldo geral', fmtMoney(fin.saldo), fin.margem != null ? `Margem de ${fmtPct(fin.margem)}` : '', fin.saldo < 0 ? 'neg' : 'pos')}
     </div>`;
 
@@ -429,7 +433,7 @@
           ${editBtn(`<button type="button" class="btn small" data-act="gestacao-new" data-matriz="${a.id}">${ICON.plus} Gestação</button>`)}</div>
         ${gs.length ? `<ul class="list">${gs.map((g, i) => `<li class="list-row">
             <span><strong>${ordinal(i + 1)} gestação</strong><small>Cruzamento ${esc(fmtDate(g.cruzamento))} · parto ${esc(fmtDate(partoDe(g)))}</small></span>
-            <span class="right">${g.nascidos != null ? `<strong>${plural(g.nascidos, 'nascido', 'nascidos')}</strong>${g.mortos ? `<small>${plural(g.mortos, 'morto', 'mortos')}</small>` : ''}` : badgeGestacao(g)}</span>
+            <span class="right">${g.vivos != null ? `<strong>${plural(nascidosDe(g), 'nascido', 'nascidos')}</strong><small>${plural(g.vivos, 'vivo', 'vivos')} · ${plural(g.mortos || 0, 'morto', 'mortos')}</small>` : badgeGestacao(g)}</span>
           </li>`).join('')}</ul><p><a href="#/crias">Ver todas as crias</a></p>` : '<p class="muted">Nenhuma gestação registrada.</p>'}
       </section>`;
     }
@@ -474,13 +478,14 @@
     const matrizes = sortAnimais(db.animais.filter((a) => (a.categoria === 'matriz' && noPlantel(a)) || gestacoesDe(a.id).length));
     const blocos = matrizes.map((m) => {
       const gs = gestacoesDe(m.id);
-      const nasc = gs.reduce((s, g) => s + (g.nascidos || 0), 0);
+      const nasc = gs.reduce((s, g) => s + (nascidosDe(g) || 0), 0);
+      const vivos = gs.reduce((s, g) => s + (g.vivos || 0), 0);
       const mortos = gs.reduce((s, g) => s + (g.mortos || 0), 0);
       const cards = [...gs].reverse().map((g) => criaCard(g, gs.indexOf(g) + 1)).join('');
       return `<section class="section">
         <div class="section-head">
           <a class="matriz-head" href="#/animal/${m.id}">${fotoHtml(m)}<span><strong>${esc(m.nome)}</strong>
-            <small>${plural(gs.length, 'gestação', 'gestações')} · ${plural(nasc, 'nascido', 'nascidos')} · ${plural(mortos, 'morto', 'mortos')}${m.saida ? ` · ${esc(statusAnimal(m).toLowerCase())}` : ''}</small></span></a>
+            <small>${plural(gs.length, 'gestação', 'gestações')} · ${plural(nasc, 'nascido', 'nascidos')} (${plural(vivos, 'vivo', 'vivos')}, ${plural(mortos, 'morto', 'mortos')})${m.saida ? ` · ${esc(statusAnimal(m).toLowerCase())}` : ''}</small></span></a>
           ${editBtn(m.saida ? '' : `<button type="button" class="btn small" data-act="gestacao-new" data-matriz="${m.id}">${ICON.plus} Gestação</button>`)}
         </div>
         ${gs.length ? `<div class="cria-grid">${cards}</div>` : '<p class="muted">Nenhuma gestação registrada.</p>'}
@@ -494,17 +499,18 @@
 
   function criaCard(g, n) {
     const parto = partoDe(g);
-    const nascida = g.nascidos != null;
+    const nascida = g.vivos != null;
     const aps = aplicacoesCria(g.id);
     const linhas = [
       ['Cruzamento', fmtDate(g.cruzamento)],
-      [nascida ? 'Parto' : 'Parto previsto', fmtDate(parto)],
+      [nascida || g.parto ? 'Parto' : 'Parto previsto', fmtDate(parto)],
     ];
     if (nascida) {
       linhas.push(['Duração', plural(diffDays(g.cruzamento, parto), 'dia', 'dias')]);
-      linhas.push(['Nascidos', String(g.nascidos)]);
-      if (g.machos != null || g.femeas != null) linhas.push(['Machos / fêmeas', `${g.machos ?? '—'} / ${g.femeas ?? '—'}`]);
+      linhas.push(['Nascidos', String(nascidosDe(g))]);
+      linhas.push(['Vivos', String(g.vivos)]);
       linhas.push(['Mortos', g.mortos != null ? String(g.mortos) : '—']);
+      if (g.machos != null || g.femeas != null) linhas.push(['Machos / fêmeas', `${g.machos ?? '—'} / ${g.femeas ?? '—'}`]);
       linhas.push(['Capação', fmtDate(g.capacao)]);
     }
     return `<article class="cria card">
@@ -1067,29 +1073,31 @@
     const matrizes = db.animais.filter((x) => x.categoria === 'matriz' && (noPlantel(x) || (g && x.id === g.matriz_id)));
     openForm({
       title: novo ? 'Nova gestação' : 'Gestação',
-      intro: novo ? `Se não souber o dia do parto, deixe em branco: fica previsto para ${GESTACAO_DIAS} dias depois do cruzamento.` : '',
+      intro: `Enquanto o dia do parto ficar em branco, a previsão é o cruzamento + ${GESTACAO_DIAS} dias (e acompanha se mudar o cruzamento).`,
       values: g || { matriz_id: matrizId || (matrizes[0] && matrizes[0].id), cruzamento: hoje() },
       fields: [
         { name: 'matriz_id', label: 'Matriz', type: 'select', required: true, options: animalOptions(matrizes) },
         { name: 'cruzamento', label: 'Cruzamento', type: 'date', half: true, required: true },
-        { name: 'parto', label: 'Parto (ou previsão)', type: 'date', half: true },
-        { name: 'nascidos', label: 'Nascidos', type: 'number', half: true, hint: 'Em branco = ainda não nasceu' },
-        { name: 'mortos', label: 'Mortos', type: 'number', half: true },
+        { name: 'parto', label: 'Parto', type: 'date', half: true, hint: ' ' },
+        { name: 'vivos', label: 'Vivos', type: 'number', half: true, hint: 'Em branco = ainda não nasceu' },
+        { name: 'mortos', label: 'Mortos', type: 'number', half: true, hint: ' ' },
         { name: 'machos', label: 'Machos', type: 'number', half: true },
         { name: 'femeas', label: 'Fêmeas', type: 'number', half: true },
         { name: 'capacao', label: 'Capação', type: 'date', half: true },
         { name: 'obs', label: 'Observações', type: 'textarea' },
       ],
       onSave: async (v) => {
-        const ints = ['nascidos', 'mortos', 'machos', 'femeas'];
+        const ints = ['vivos', 'mortos', 'machos', 'femeas'];
         for (const k of ints) {
           if (v[k] != null && (!Number.isInteger(v[k]) || v[k] < 0)) throw new Error('Use números inteiros nas quantidades.');
         }
+        if (v.vivos == null && v.mortos != null) throw new Error('Preencha os vivos (pode ser 0) para registrar o parto.');
         const row = {
           matriz_id: v.matriz_id,
           cruzamento: v.cruzamento,
-          parto: v.parto || addDays(v.cruzamento, GESTACAO_DIAS),
-          nascidos: v.nascidos, mortos: v.mortos, machos: v.machos, femeas: v.femeas,
+          // Sem data: fica a previsão (cruzamento + 114). Depois do parto registrado, a data fica fixa.
+          parto: v.parto || (v.vivos != null ? addDays(v.cruzamento, GESTACAO_DIAS) : null),
+          vivos: v.vivos, mortos: v.mortos, machos: v.machos, femeas: v.femeas,
           capacao: v.capacao,
           obs: v.obs,
         };
@@ -1103,6 +1111,25 @@
       } : null,
       deleteConfirm: 'Excluir esta gestação? As aplicações nas crias também são apagadas.',
     });
+
+    // Dicas que acompanham o que é digitado: previsão do parto e nascidos (vivos + mortos)
+    const dicas = () => {
+      const cruz = form.elements.cruzamento.value;
+      const partoHint = $('[data-field="parto"] .hint', form);
+      partoHint.textContent = form.elements.parto.value || !cruz
+        ? ''
+        : `Em branco: previsto para ${fmtDate(addDays(cruz, GESTACAO_DIAS))}`;
+      const vivos = parseNum(form.elements.vivos.value);
+      const mortos = parseNum(form.elements.mortos.value);
+      const ok = (n) => n == null || Number.isInteger(n);
+      $('[data-field="mortos"] .hint', form).textContent = vivos != null && ok(vivos) && ok(mortos)
+        ? `Nascidos: ${vivos + (mortos || 0)}`
+        : '';
+    };
+    dicas();
+    form.oninput = dicas;
+    form.onchange = dicas;
+    dlg.addEventListener('close', () => { form.oninput = null; form.onchange = null; }, { once: true });
   }
 
   // alvo: { animal } ou { gestacao } ou nada (escolher vários animais)

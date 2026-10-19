@@ -14,8 +14,9 @@ quem decide é o dono, na tela **Conta**. Veja [SUPABASE.md](SUPABASE.md).
   vacinas atrasadas ou chegando e partos dos próximos 15 dias.
 - **Animais**: ficha de cada animal (foto, idade calculada sozinha, compra, venda, abate), com filtro
   por situação (no plantel, vendidos, abatidos, mortos).
-- **Crias**: gestações de cada matriz. Ao registrar o cruzamento, o parto fica previsto para 114 dias depois;
-  depois do parto, registre nascidos, machos/fêmeas, mortos, capação e as aplicações nos leitões.
+- **Crias**: gestações de cada matriz. Enquanto o dia do parto não for preenchido, ele fica previsto para
+  114 dias depois do cruzamento; depois do parto, registre vivos e mortos (o site mostra os nascidos, a soma
+  dos dois), machos/fêmeas, capação e as aplicações nos leitões.
 - **Saúde**: calendário de cada vacina com reforço (Verme a cada 180 dias, Suiven a cada 365, Megabov a cada 120),
   com última e próxima aplicação de cada animal. Dá para registrar uma aplicação em vários animais de uma vez.
 - **Ração**: fórmula de cada fase com a conta de quantos kg vão de cada ingrediente, a partir do total de ração
