@@ -80,6 +80,7 @@
   const filters = { animais: 'plantel', ano: 'todos', lancTodos: false, histTodos: false };
   let racaoModo = 'total';
   let racaoQtd = 100;
+  let racaoIng = 'Milho';
   let installPrompt = null;
   let toastTimer = null;
 
@@ -501,39 +502,59 @@
     return [...db.racoes].sort((a, b) => a.ordem - b.ordem || a.fase.localeCompare(b.fase, 'pt-BR'));
   }
 
+  // Ingredientes usados em alguma fase, na ordem em que aparecem
+  function ingredientesRacao() {
+    const nomes = [];
+    racoesOrdenadas().forEach((r) => (r.itens || []).forEach((i) => {
+      if (Number(i.pct) > 0 && i.nome && !nomes.includes(i.nome)) nomes.push(i.nome);
+    }));
+    return nomes;
+  }
+
+  /*
+   * Como na Calculadora de ração: a partir do total da mistura ou da quantidade
+   * de um ingrediente. Cada ingrediente = total × (% dele ÷ soma das %).
+   */
   function renderRacao() {
-    const base = racaoModo === 'base';
+    const nomes = ingredientesRacao();
+    if (!nomes.includes(racaoIng)) racaoIng = nomes.includes('Milho') ? 'Milho' : nomes[0] || '';
+    const porIngrediente = racaoModo === 'ingrediente' && !!racaoIng;
+
     const cards = racoesOrdenadas().map((r) => {
-      const itens = r.itens || [];
-      const soma = itens.reduce((s, i) => s + Number(i.pct || 0), 0);
-      const primeiro = itens[0];
-      let total = racaoQtd;
-      if (base) total = primeiro && Number(primeiro.pct) > 0 ? racaoQtd / (Number(primeiro.pct) / 100) : NaN;
+      const itens = (r.itens || []).filter((i) => Number(i.pct) > 0);
+      const soma = itens.reduce((s, i) => s + Number(i.pct), 0);
+      const baseItem = porIngrediente ? itens.find((i) => i.nome === racaoIng) : null;
+      let total = soma > 0 ? racaoQtd : NaN;
+      if (porIngrediente) total = baseItem ? (racaoQtd * soma) / Number(baseItem.pct) : NaN;
+      const kg = (pct) => (Number.isFinite(total) ? esc(fmtKg((total * pct) / soma)) : '—');
       const ok = Math.abs(soma - 100) < 0.01;
-      return `<article class="card racao">
+      return `<article class="card racao${porIngrediente && !baseItem ? ' sem-base' : ''}">
         <header><div><h3>${esc(r.fase)}</h3>${r.faixa ? `<small class="muted">${esc(r.faixa)}</small>` : ''}</div>
           ${editBtn(`<button type="button" class="icon" data-act="racao-edit" data-id="${r.id}" aria-label="Editar ${esc(r.fase)}" title="Editar">${ICON.edit}</button>`)}</header>
         <table class="table compact">
-          <tbody>${itens.filter((i) => Number(i.pct) > 0).map((i) => `<tr><th scope="row">${esc(i.nome)}</th>
+          <tbody>${itens.map((i) => `<tr${baseItem === i ? ' class="base"' : ''}><th scope="row">${esc(i.nome)}</th>
             <td class="num muted">${esc(fmtPct(Number(i.pct)))}</td>
-            <td class="num"><strong>${Number.isFinite(total) ? esc(fmtKg((total * Number(i.pct)) / 100)) : '—'}</strong></td></tr>`).join('')}</tbody>
-          <tfoot><tr><th scope="row">Total</th><td class="num ${ok ? 'muted' : 'danger-text'}">${esc(fmtPct(soma))}</td>
-            <td class="num"><strong>${Number.isFinite(total) ? esc(fmtKg((total * soma) / 100)) : '—'}</strong></td></tr></tfoot>
+            <td class="num"><strong>${kg(Number(i.pct))}</strong></td></tr>`).join('')}</tbody>
+          <tfoot><tr><th scope="row">Total da mistura</th><td class="num ${ok ? 'muted' : 'danger-text'}">${esc(fmtPct(soma))}</td>
+            <td class="num"><strong>${Number.isFinite(total) ? esc(fmtKg(total)) : '—'}</strong></td></tr></tfoot>
         </table>
-        ${ok ? '' : '<p class="danger-text small">As porcentagens não somam 100%.</p>'}
-        ${base && !(primeiro && Number(primeiro.pct) > 0) ? `<p class="muted small">Esta fórmula não tem ${esc(primeiro ? primeiro.nome : 'ingrediente base')}.</p>` : ''}
+        ${ok ? '' : '<p class="danger-text small">As porcentagens não somam 100%: as quantidades foram calculadas proporcionalmente.</p>'}
+        ${porIngrediente && !baseItem ? `<p class="muted small">Esta fase não leva ${esc(racaoIng.toLowerCase())}.</p>` : ''}
       </article>`;
     }).join('');
 
-    const baseNome = (racoesOrdenadas()[0] && racoesOrdenadas()[0].itens[0] && racoesOrdenadas()[0].itens[0].nome) || 'Milho';
     return `${pageHead('Ração', 'Quanto vai de cada ingrediente em cada fase',
       editBtn(`<button type="button" class="btn" data-act="racao-new">${ICON.plus} Fase</button>`))}
       <div class="calc-bar card">
-        <div class="seg" role="group" aria-label="Como calcular">
-          <button type="button" class="${base ? '' : 'on'}" data-act="racao-modo" data-value="total">Quero fazer</button>
-          <button type="button" class="${base ? 'on' : ''}" data-act="racao-modo" data-value="base">Tenho de ${esc(baseNome.toLowerCase())}</button>
-        </div>
-        <label class="qty"><input id="racaoQtd" inputmode="decimal" value="${esc(toInput(racaoQtd))}" aria-label="Quantidade em kg"><span>kg${base ? '' : ' de ração'}</span></label>
+        <div class="calc-field"><span class="calc-label">Calcular a partir de</span>
+          <div class="seg" role="group" aria-label="Calcular a partir de">
+            <button type="button" class="${porIngrediente ? '' : 'on'}" aria-pressed="${!porIngrediente}" data-act="racao-modo" data-value="total">Total da mistura</button>
+            <button type="button" class="${porIngrediente ? 'on' : ''}" aria-pressed="${porIngrediente}" data-act="racao-modo" data-value="ingrediente">Um ingrediente</button>
+          </div></div>
+        ${porIngrediente ? `<label class="calc-field"><span class="calc-label">Ingrediente</span>
+          <select id="racaoIng">${nomes.map((n) => `<option${n === racaoIng ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>` : ''}
+        <label class="calc-field"><span class="calc-label">${porIngrediente ? `Quantidade de ${esc(racaoIng.toLowerCase())}` : 'Total da mistura'}</span>
+          <span class="qty"><input id="racaoQtd" inputmode="decimal" value="${esc(toInput(racaoQtd))}" autocomplete="off"><span>kg</span></span></label>
       </div>
       <div class="racao-grid" id="racaoGrid">${cards || '<p class="muted">Nenhuma fórmula cadastrada.</p>'}</div>
       ${CFG.calculadoraUrl ? `<p class="muted small">Também dá para usar a <a href="${esc(CFG.calculadoraUrl)}" target="_blank" rel="noopener">Calculadora de ração</a>.</p>` : ''}`;
@@ -1257,6 +1278,11 @@
   });
 
   view.addEventListener('change', async (e) => {
+    if (e.target.id === 'racaoIng') {
+      racaoIng = e.target.value;
+      render();
+      return;
+    }
     const el = e.target.closest('[data-act-change="acesso-papel"]');
     if (!el) return;
     try {
