@@ -134,12 +134,9 @@
   const pesoAbate = (ab) => partesAbate(ab).reduce((s, i) => s + Number(i.kg || 0), 0);
   const kgParte = (ab, nome) => partesAbate(ab).filter((i) => i.parte.toLowerCase() === nome.toLowerCase()).reduce((s, i) => s + Number(i.kg || 0), 0);
 
+  // "Carne 75,00 kg · Toucinho 30,00 kg" (os preços ficam no formulário e na ficha)
   function resumoPartes(ab) {
-    return partesAbate(ab).map((i) => [
-      i.parte,
-      i.kg != null ? fmtKg(i.kg) : '',
-      i.preco != null ? `a ${fmtMoney(i.preco)}/kg` : (i.valor != null ? fmtMoney(i.valor) : ''),
-    ].filter(Boolean).join(' ')).join(' · ');
+    return partesAbate(ab).map((i) => (i.kg != null ? `${i.parte} ${fmtKg(i.kg)}` : i.parte)).join(' · ');
   }
 
   // Calendário: para cada animal no plantel e produto com reforço, a última e a próxima aplicação.
