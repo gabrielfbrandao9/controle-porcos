@@ -126,6 +126,17 @@
   const aplicacoesAnimal = (id) => sortByDate(db.aplicacoes.filter((x) => x.animal_id === id));
   const aplicacoesCria = (id) => sortByDate(db.aplicacoes.filter((x) => x.gestacao_id === id));
 
+  // Número da dose: posição da aplicação entre as do mesmo produto no mesmo animal (ou crias), por data
+  function numeroDose(ap) {
+    const mesmas = db.aplicacoes
+      .filter((x) => x.produto_id === ap.produto_id && x.animal_id === ap.animal_id && x.gestacao_id === ap.gestacao_id)
+      .sort((a, b) => a.data.localeCompare(b.data) || String(a.criado_em || '').localeCompare(String(b.criado_em || '')) || a.id.localeCompare(b.id));
+    return mesmas.findIndex((x) => x.id === ap.id) + 1;
+  }
+
+  const dose = (n) => `${ordinal(n)} dose`;
+  const nomeProduto = (ap) => (produto(ap.produto_id) || {}).nome || '?';
+
   function alvoAplicacao(ap) {
     if (ap.animal_id) return nomeAnimal(ap.animal_id);
     const g = byId('gestacoes', ap.gestacao_id);
@@ -163,7 +174,7 @@
         const aps = db.aplicacoes.filter((x) => x.animal_id === a.id && x.produto_id === p.id);
         const ultima = aps.reduce((m, x) => (x.data > m ? x.data : m), '');
         const proxima = ultima ? addDays(ultima, p.intervalo_dias) : null;
-        rows.push({ produto: p, animal: a, ultima: ultima || null, proxima, faltam: proxima ? daysUntil(proxima) : null });
+        rows.push({ produto: p, animal: a, ultima: ultima || null, proxima, faltam: proxima ? daysUntil(proxima) : null, doses: aps.length });
       }
     }
     return rows;
@@ -421,8 +432,8 @@
             const ultima = list[list.length - 1].data;
             const prox = p.intervalo_dias && noPlantel(a) ? addDays(ultima, p.intervalo_dias) : null;
             return `<tr><th scope="row">${esc(p.nome)}</th>
-              <td><div class="dose-list">${list.map((x, i) => doseChip(x, `${ordinal(i + 1)} · ${fmtDate(x.data)}`)).join('')}</div></td>
-              <td>${prox ? `${esc(fmtDate(prox))}<br>${badgeVacina({ faltam: daysUntil(prox) })}` : '<span class="muted">—</span>'}</td></tr>`;
+              <td><div class="dose-list">${list.map((x, i) => doseChip(x, `${dose(i + 1)} · ${fmtDate(x.data)}`)).join('')}</div></td>
+              <td>${prox ? `${esc(fmtDate(prox))} <small class="muted">${dose(list.length + 1)}</small><br>${badgeVacina({ faltam: daysUntil(prox) })}` : '<span class="muted">—</span>'}</td></tr>`;
           }).join('')}</tbody></table></div>`
       : '<p class="muted">Nenhuma aplicação registrada.</p>';
 
@@ -516,7 +527,7 @@
     return `<article class="cria card">
       <header><h3>${ordinal(n)} gestação</h3>${badgeGestacao(g)}</header>
       <dl class="kv">${linhas.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
-      ${aps.length ? `<div class="dose-list">${aps.map((x) => doseChip(x, `${(produto(x.produto_id) || {}).nome || '?'} · ${fmtDate(x.data)}`)).join('')}</div>` : ''}
+      ${aps.length ? `<div class="dose-list">${aps.map((x) => doseChip(x, `${nomeProduto(x)} ${dose(numeroDose(x))} · ${fmtDate(x.data)}`)).join('')}</div>` : ''}
       ${g.obs ? `<p class="obs">${esc(g.obs)}</p>` : ''}
       ${editBtn(`<footer><button type="button" class="btn small ghost" data-act="gestacao-edit" data-id="${g.id}">${ICON.edit} ${nascida ? 'Editar' : 'Registrar parto'}</button>
         <button type="button" class="btn small ghost" data-act="aplicacao-new" data-gestacao="${g.id}">${ICON.syringe} Aplicação</button></footer>`)}
@@ -536,7 +547,9 @@
         rows.length ? `<div class="table-wrap"><table class="table">
           <thead><tr><th>Animal</th><th>Última</th><th>Próxima</th><th>Situação</th></tr></thead>
           <tbody>${rows.map((r) => `<tr><th scope="row"><a href="#/animal/${r.animal.id}">${esc(r.animal.nome)}</a></th>
-            <td>${esc(fmtDate(r.ultima))}</td><td>${esc(fmtDate(r.proxima))}</td><td>${badgeVacina(r)}</td></tr>`).join('')}</tbody>
+            <td>${esc(fmtDate(r.ultima))}${r.doses ? `<small class="muted block">${dose(r.doses)}</small>` : ''}</td>
+            <td>${esc(fmtDate(r.proxima))}${r.proxima ? `<small class="muted block">${dose(r.doses + 1)}</small>` : ''}</td>
+            <td>${badgeVacina(r)}</td></tr>`).join('')}</tbody>
         </table></div>` : '<p class="muted">Nenhum animal no plantel.</p>');
     }).join('');
 
@@ -546,7 +559,7 @@
       ? `<div class="table-wrap"><table class="table">
           <thead><tr><th>Data</th><th>Produto</th><th>Em</th></tr></thead>
           <tbody>${mostra.map((x) => `<tr${canEdit() ? ` class="clickable" data-act="aplicacao-edit" data-id="${x.id}"` : ''}>
-            <td>${esc(fmtDate(x.data))}</td><td>${esc((produto(x.produto_id) || {}).nome || '—')}</td>
+            <td>${esc(fmtDate(x.data))}</td><td>${esc(nomeProduto(x))}<small class="muted block">${dose(numeroDose(x))}</small></td>
             <td>${esc(alvoAplicacao(x))}${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td></tr>`).join('')}</tbody>
         </table></div>
         ${hist.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="hist-todos">Mostrar todas (${hist.length})</button>` : ''}`
@@ -1140,7 +1153,7 @@
     const plantel = db.animais.filter(noPlantel);
     const varios = novo && !alvo.animal && !alvo.gestacao;
     let titulo = 'Aplicação';
-    if (ap) titulo = `Aplicação em ${alvoAplicacao(ap)}`;
+    if (ap) titulo = `${nomeProduto(ap)} ${dose(numeroDose(ap))} em ${alvoAplicacao(ap)}`;
     else if (alvo.animal) titulo = `Aplicação em ${nomeAnimal(alvo.animal)}`;
     else if (alvo.gestacao) titulo = `Aplicação nas crias`;
 
