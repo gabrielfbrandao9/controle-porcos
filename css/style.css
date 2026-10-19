@@ -503,6 +503,12 @@ dialog::backdrop { background: rgba(30, 18, 10, 0.45); }
 .sub-bloco { margin-top: 18px; }
 .sub-bloco .bloco-head { margin-bottom: 8px; }
 
+.doses { gap: 8px; margin-top: -4px; }
+.doses .btn { align-self: flex-start; }
+#dosesExtras { display: grid; gap: 8px; }
+#dosesExtras:empty { display: none; }
+.dose-row { display: grid; grid-template-columns: minmax(0, 260px) 40px; gap: 6px; align-items: end; }
+
 .items { display: grid; gap: 6px; }
 .item-row { display: grid; grid-template-columns: 1fr 100px 40px; gap: 6px; align-items: center; }
 .item-row .input-affix input { text-align: right; }

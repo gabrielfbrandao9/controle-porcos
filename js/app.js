@@ -1146,7 +1146,7 @@
 
     const fields = [
       { name: 'produto_id', label: 'Produto', type: 'select', half: true, required: true, options: produtos.map((p) => [p.id, p.nome]) },
-      { name: 'data', label: 'Data', type: 'date', half: true, required: true },
+      { name: 'data', label: novo ? 'Data da 1ª dose' : 'Data', type: 'date', half: true, required: true },
     ];
     if (varios) fields.push({ name: 'animais', label: 'Em quais animais', type: 'checkboxes', required: true, options: animalOptions(plantel) });
     fields.push({ name: 'obs', label: 'Observações', type: 'textarea', placeholder: 'Dose, lote...' });
@@ -1156,23 +1156,49 @@
       values: ap || { produto_id: produtos[0].id, data: hoje(), animais: [] },
       fields,
       onSave: async (v) => {
-        const base = { produto_id: v.produto_id, data: v.data, obs: v.obs };
+        const base = { produto_id: v.produto_id, obs: v.obs };
         if (ap) {
-          await save('aplicacoes', ap.id, base);
+          await save('aplicacoes', ap.id, { ...base, data: v.data });
           return 'Alterações salvas';
         }
-        if (varios) {
-          await saveMany('aplicacoes', v.animais.map((id) => ({ ...base, animal_id: id })));
-          return v.animais.length > 1 ? `${v.animais.length} aplicações registradas` : 'Aplicação registrada';
-        }
-        await save('aplicacoes', null, { ...base, animal_id: alvo.animal || null, gestacao_id: alvo.gestacao || null });
-        return 'Aplicação registrada';
+        // Uma aplicação para cada data (doses) em cada animal (ou nas crias)
+        const extras = $$('input[name="data_extra"]', form).map((i) => i.value).filter(Boolean);
+        const datas = [...new Set([v.data, ...extras])].sort();
+        const alvos = varios
+          ? v.animais.map((id) => ({ animal_id: id }))
+          : [{ animal_id: alvo.animal || null, gestacao_id: alvo.gestacao || null }];
+        const rows = alvos.flatMap((t) => datas.map((data) => ({ ...base, ...t, data })));
+        await saveMany('aplicacoes', rows);
+        return rows.length > 1 ? `${rows.length} aplicações registradas` : 'Aplicação registrada';
       },
       onDelete: ap ? async () => {
         await remove('aplicacoes', ap.id);
         return 'Aplicação excluída';
       } : null,
     });
+    if (!novo) return;
+
+    // Mais doses da mesma vacina: cada data extra vira outra aplicação
+    $('[data-field="data"]', form).insertAdjacentHTML('afterend', `<div class="field doses">
+      <div id="dosesExtras"></div>
+      <button type="button" class="btn small ghost" data-add-dose>${ICON.plus} Outra dose</button>
+    </div>`);
+    const renumerar = () => $$('.dose-row', form).forEach((r, k) => { $('span', r).textContent = `Data da ${ordinal(k + 2)} dose`; });
+    form.onclick = (e) => {
+      if (e.target.closest('[data-add-dose]')) {
+        $('#dosesExtras').insertAdjacentHTML('beforeend', `<div class="dose-row"><label class="field"><span></span>
+          <input type="date" name="data_extra"></label>
+          <button type="button" class="icon" data-remove-dose aria-label="Tirar esta dose">×</button></div>`);
+        renumerar();
+        $('#dosesExtras .dose-row:last-child input').focus();
+      }
+      const rm = e.target.closest('[data-remove-dose]');
+      if (rm) {
+        rm.closest('.dose-row').remove();
+        renumerar();
+      }
+    };
+    dlg.addEventListener('close', () => { form.onclick = null; }, { once: true });
   }
 
   function formProduto(p) {
