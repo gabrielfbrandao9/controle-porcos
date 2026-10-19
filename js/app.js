@@ -51,6 +51,7 @@
     syringe: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 4.5 5 5M17 7l-8.5 8.5M12 5.5l6.5 6.5M7 13.5l3.5 3.5M8.5 15.5 4 20"/></svg>',
     pig: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="13" rx="7.5" ry="6.5"/><path d="M6.5 8.2 5 4.5l4 2M17.5 8.2 19 4.5l-4 2"/><ellipse cx="12" cy="15" rx="3" ry="2"/></svg>',
     ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+    chevron: '<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
     google: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>',
   };
@@ -229,6 +230,48 @@
     return `<span class="foto empty cat-${a.categoria} ${cls}">${ICON.pig}</span>`;
   }
 
+  // ---------- Tabelas que dá para esconder ----------
+  // Quais estão escondidas fica guardado neste aparelho.
+
+  const FECHADAS_KEY = 'porcos:fechadas';
+  const fechadas = (() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(FECHADAS_KEY) || '[]'));
+    } catch (e) {
+      return new Set();
+    }
+  })();
+
+  // Seção com título clicável que mostra ou esconde o conteúdo.
+  // opts: { extra: botões ao lado do título, sub: true para um bloco dentro de outro }
+  function bloco(key, titulo, corpo, opts = {}) {
+    const fechado = fechadas.has(key);
+    const H = opts.sub ? 'h3' : 'h2';
+    return `<section class="${opts.sub ? 'sub-bloco' : 'section card'} bloco${fechado ? ' fechado' : ''}" data-bloco="${esc(key)}">
+      <div class="section-head bloco-head">
+        <${H}><button type="button" class="bloco-toggle" data-act="bloco" data-key="${esc(key)}" aria-expanded="${!fechado}"
+          title="${fechado ? 'Mostrar' : 'Esconder'}">${ICON.chevron}<span>${titulo}</span></button></${H}>
+        ${opts.extra || ''}
+      </div>
+      <div class="bloco-body"${fechado ? ' hidden' : ''}>${corpo}</div>
+    </section>`;
+  }
+
+  function toggleBloco(btn) {
+    const key = btn.dataset.key;
+    const sec = btn.closest('[data-bloco]');
+    const fechar = !fechadas.has(key);
+    if (fechar) fechadas.add(key);
+    else fechadas.delete(key);
+    sec.classList.toggle('fechado', fechar);
+    $('.bloco-body', sec).hidden = fechar;
+    btn.setAttribute('aria-expanded', String(!fechar));
+    btn.title = fechar ? 'Mostrar' : 'Esconder';
+    try {
+      localStorage.setItem(FECHADAS_KEY, JSON.stringify([...fechadas]));
+    } catch (e) { /* sem armazenamento: vale até fechar o site */ }
+  }
+
   const stat = (label, value, sub, cls = '') => `<div class="stat ${cls}"><span class="stat-label">${label}</span>
       <strong class="stat-value">${value}</strong>${sub ? `<span class="stat-sub">${sub}</span>` : ''}</div>`;
 
@@ -392,12 +435,12 @@
     }
 
     const abate = db.abates.find((x) => x.animal_id === a.id);
-    const abateHtml = abate ? `<section class="section card"><div class="section-head"><h2>Abate</h2>
-          ${editBtn(`<button type="button" class="btn small" data-act="abate-edit" data-id="${abate.id}">${ICON.edit} Editar</button>`)}</div>
+    const abateHtml = abate ? bloco('animal-abate', 'Abate', `
         <dl class="info"><div><dt>Data</dt><dd>${esc(fmtDate(abate.data))}</dd></div>
         <div><dt>Peso</dt><dd>${esc(fmtKg(pesoAbate(abate)))}</dd></div>
         <div><dt>Valor</dt><dd>${esc(fmtMoney(abate.valor))}</dd></div></dl>
-        ${partesAbate(abate).length ? partesTabela(abate) : ''}</section>` : '';
+        ${partesAbate(abate).length ? partesTabela(abate) : ''}`,
+      { extra: editBtn(`<button type="button" class="btn small" data-act="abate-edit" data-id="${abate.id}">${ICON.edit} Editar</button>`) }) : '';
 
     return `<a class="back" href="#/animais">${ICON.back} Animais</a>
       <div class="hero card">
@@ -413,7 +456,7 @@
             <button type="button" class="btn" data-act="aplicacao-new" data-animal="${a.id}">${ICON.syringe} Registrar aplicação</button></div>`)}
         </div>
       </div>
-      <section class="section card"><h2>Vacinas e remédios</h2>${saudeHtml}</section>
+      ${bloco('animal-vacinas', 'Vacinas e remédios', saudeHtml)}
       ${gestHtml}
       ${abateHtml}`;
   }
@@ -483,14 +526,12 @@
 
     const calHtml = comReforco.map((p) => {
       const rows = cal.filter((r) => r.produto.id === p.id);
-      return `<section class="section card">
-        <div class="section-head"><h2>${esc(p.nome)} <small class="muted">a cada ${p.intervalo_dias} dias</small></h2></div>
-        ${rows.length ? `<div class="table-wrap"><table class="table">
+      return bloco(`saude-${p.id}`, `${esc(p.nome)} <small class="muted">a cada ${p.intervalo_dias} dias</small>`,
+        rows.length ? `<div class="table-wrap"><table class="table">
           <thead><tr><th>Animal</th><th>Última</th><th>Próxima</th><th>Situação</th></tr></thead>
           <tbody>${rows.map((r) => `<tr><th scope="row"><a href="#/animal/${r.animal.id}">${esc(r.animal.nome)}</a></th>
             <td>${esc(fmtDate(r.ultima))}</td><td>${esc(fmtDate(r.proxima))}</td><td>${badgeVacina(r)}</td></tr>`).join('')}</tbody>
-        </table></div>` : '<p class="muted">Nenhum animal no plantel.</p>'}
-      </section>`;
+        </table></div>` : '<p class="muted">Nenhum animal no plantel.</p>');
     }).join('');
 
     const hist = sortByDate(db.aplicacoes, 'data', true);
@@ -514,7 +555,7 @@
       editBtn(`<button type="button" class="btn primary" data-act="aplicacao-new">${ICON.syringe} Registrar aplicação</button>`))}
       ${calHtml || '<p class="muted">Nenhum produto com reforço cadastrado.</p>'}
       <div class="two-col">
-        <section class="section card"><h2>Últimas aplicações</h2>${histHtml}</section>
+        ${bloco('saude-historico', 'Últimas aplicações', histHtml)}
         <section class="section card"><h2>Vacinas e remédios</h2>${prodHtml}</section>
       </div>`;
   }
@@ -661,16 +702,14 @@
         ${stat('Saldo', fmtMoney(t.saldo), t.margem != null ? `Margem de ${fmtPct(t.margem)}` : '', t.saldo < 0 ? 'neg' : 'pos')}
         ${stat('Carne abatida', fmtKg(carne), `${plural(abates.length, 'abate', 'abates')} · ${fmtKg(peso)} no total · ${fmtMoney(valorAbates)}`)}
       </div>
-      <section class="section card"><h2>Por mês</h2>
-        ${meses.size ? `<div class="table-wrap"><table class="table">
+      ${bloco('financas-meses', 'Por mês', meses.size ? `<div class="table-wrap"><table class="table">
           <thead><tr><th>Mês</th><th class="num">Soro</th><th class="num">Ração</th><th class="num">Outras</th><th class="num">Receitas</th><th class="num">Saldo</th></tr></thead>
           <tbody>${mesesHtml}</tbody>
           <tfoot><tr><th scope="row">Total</th><td class="num">${esc(fmtMoney(t.soro))}</td><td class="num">${esc(fmtMoney(t.racao))}</td><td class="num">${esc(fmtMoney(t.outras))}</td>
             <td class="num">${esc(fmtMoney(t.receitas))}</td><td class="num"><strong>${esc(fmtMoney(t.saldo))}</strong></td></tr></tfoot>
-        </table></div>` : '<p class="muted">Nenhum lançamento.</p>'}
-      </section>
-      <section class="section card"><h2>Lançamentos</h2>${lancHtml}</section>
-      <section class="section card"><h2>Abates</h2>${abatesHtml}</section>`;
+        </table></div>` : '<p class="muted">Nenhum lançamento.</p>')}
+      ${bloco('financas-lancamentos', 'Lançamentos', lancHtml)}
+      ${bloco('financas-abates', 'Abates', abatesHtml)}`;
   }
 
   // Tabela das partes de um abate
@@ -699,14 +738,13 @@
     }));
     if (m.size < 2 && ![...m.values()].some((x) => x.temValor)) return '';
     const rows = [...m.values()].sort((a, b) => b.kg - a.kg);
-    return `<h3 class="sub-title">Por parte</h3>
-      <div class="table-wrap"><table class="table compact">
+    return bloco('financas-por-parte', 'Por parte', `<div class="table-wrap"><table class="table compact">
         <thead><tr><th>Parte</th><th class="num">Peso</th><th class="num">Valor</th><th class="num">Preço médio/kg</th></tr></thead>
         <tbody>${rows.map((x) => `<tr><th scope="row">${esc(x.parte)}</th><td class="num">${esc(fmtKg(x.kg))}</td>
           <td class="num">${x.temValor ? esc(fmtMoney(x.valor)) : '—'}</td>
           <td class="num">${x.temValor && x.kgComValor > 0 ? esc(fmtMoney(x.valor / x.kgComValor)) : '—'}</td></tr>`).join('')}</tbody>
       </table></div>
-      <p class="muted small">Valor e preço médio só contam as partes lançadas com preço. Abates antigos têm só o valor total.</p>`;
+      <p class="muted small">Valor e preço médio só contam as partes lançadas com preço. Abates antigos têm só o valor total.</p>`, { sub: true });
   }
 
   // ---------- Conta e acesso ----------
@@ -1410,6 +1448,7 @@
     'racao-new': () => formRacao(null),
     'racao-edit': (el) => formRacao(byId('racoes', el.dataset.id)),
     'racao-modo': (el) => { racaoModo = el.dataset.value; render(); },
+    bloco: (el) => toggleBloco(el),
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
