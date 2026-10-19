@@ -134,9 +134,20 @@
   const pesoAbate = (ab) => partesAbate(ab).reduce((s, i) => s + Number(i.kg || 0), 0);
   const kgParte = (ab, nome) => partesAbate(ab).filter((i) => i.parte.toLowerCase() === nome.toLowerCase()).reduce((s, i) => s + Number(i.kg || 0), 0);
 
-  // "Carne 75,00 kg · Toucinho 30,00 kg" (os preços ficam no formulário e na ficha)
-  function resumoPartes(ab) {
-    return partesAbate(ab).map((i) => (i.kg != null ? `${i.parte} ${fmtKg(i.kg)}` : i.parte)).join(' · ');
+  // Partes que aparecem nos abates (sem repetir, ignorando maiúsculas): Carne e Toucinho
+  // primeiro, depois na ordem da lista de sugestões e, por fim, na ordem em que aparecem.
+  function colunasPartes(abates) {
+    const m = new Map();
+    abates.forEach((a) => partesAbate(a).forEach((i) => {
+      const nome = i.parte.trim();
+      const key = nome.toLowerCase();
+      if (!m.has(key)) m.set(key, { key, nome, ordem: m.size });
+    }));
+    const pos = (c) => {
+      const k = PARTES_SUGERIDAS.findIndex((p) => p.toLowerCase() === c.key);
+      return k >= 0 ? k : PARTES_SUGERIDAS.length + c.ordem;
+    };
+    return [...m.values()].sort((a, b) => pos(a) - pos(b));
   }
 
   // Calendário: para cada animal no plantel e produto com reforço, a última e a próxima aplicação.
@@ -613,14 +624,28 @@
     const carne = abates.reduce((s, a) => s + kgParte(a, 'Carne'), 0);
     const peso = abates.reduce((s, a) => s + pesoAbate(a), 0);
     const valorAbates = abates.reduce((s, a) => s + Number(a.valor || 0), 0);
+    // Uma coluna para cada parte que aparece nos abates do período
+    const colunas = colunasPartes(abates);
+    const celula = (a, col) => {
+      const list = partesAbate(a).filter((i) => i.parte.trim().toLowerCase() === col.key);
+      if (!list.length) return '<span class="muted">—</span>';
+      if (list.some((i) => i.kg != null)) return esc(fmtKg(list.reduce((s, i) => s + Number(i.kg || 0), 0)));
+      const v = list.reduce((s, i) => s + Number(i.valor || 0), 0);
+      return v ? `<span class="muted">${esc(fmtMoney(v))}</span>` : '<span class="muted">sim</span>';
+    };
+    const totalColuna = (col) => {
+      const list = abates.flatMap((a) => partesAbate(a).filter((i) => i.parte.trim().toLowerCase() === col.key && i.kg != null));
+      return list.length ? fmtKg(list.reduce((s, i) => s + Number(i.kg), 0)) : '—';
+    };
     const abatesHtml = abates.length
       ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Data</th><th>Animal</th><th>Partes</th><th class="num">Peso</th><th class="num">Valor</th></tr></thead>
+          <thead><tr><th>Data</th><th>Animal</th>${colunas.map((c) => `<th class="num">${esc(c.nome)}</th>`).join('')}<th class="num">Valor</th></tr></thead>
           <tbody>${abates.map((a) => `<tr${canEdit() ? ` class="clickable" data-act="abate-edit" data-id="${a.id}"` : ''}>
             <td>${esc(fmtDate(a.data))}</td><td>${a.animal_id ? esc(nomeAnimal(a.animal_id)) : '<span class="muted">—</span>'}</td>
-            <td class="partes-cell">${partesAbate(a).length ? esc(resumoPartes(a)) : '<span class="muted">—</span>'}</td>
-            <td class="num">${partesAbate(a).length ? esc(fmtKg(pesoAbate(a))) : '—'}</td><td class="num">${esc(fmtMoney(a.valor))}</td></tr>`).join('')}</tbody>
-          <tfoot><tr><th scope="row" colspan="3">Total</th><td class="num">${esc(fmtKg(peso))}</td><td class="num">${esc(fmtMoney(valorAbates))}</td></tr></tfoot>
+            ${colunas.map((c) => `<td class="num">${celula(a, c)}</td>`).join('')}
+            <td class="num">${esc(fmtMoney(a.valor))}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><th scope="row" colspan="2">Total</th>${colunas.map((c) => `<td class="num">${esc(totalColuna(c))}</td>`).join('')}
+            <td class="num">${esc(fmtMoney(valorAbates))}</td></tr></tfoot>
         </table></div>
         ${porParteHtml(abates)}`
       : '<p class="muted">Nenhum abate.</p>';
