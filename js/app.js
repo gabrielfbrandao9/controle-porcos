@@ -78,7 +78,7 @@
   let loadedAt = 0;
   let offline = false;
   let current = { name: 'inicio', id: null };
-  const filters = { animais: 'plantel', ano: 'todos', lancTodos: false, histTodos: false };
+  const filters = { animais: 'plantel', ano: 'todos', lancTodos: false, histTodos: false, esporadicoTodos: new Set() };
   let racaoModo = 'total';
   let racaoQtd = 100;
   let racaoIng = 'Milho';
@@ -553,6 +553,23 @@
         </table></div>` : '<p class="muted">Nenhum animal no plantel.</p>');
     }).join('');
 
+    // Produtos sem "repetir a cada": uso esporádico, mostra as aplicações feitas
+    const esporadicoHtml = produtos.filter((p) => !p.intervalo_dias).map((p) => {
+      const aps = sortByDate(db.aplicacoes.filter((x) => x.produto_id === p.id), 'data', true);
+      const todas = filters.esporadicoTodos.has(p.id);
+      const mostra = todas ? aps : aps.slice(0, 10);
+      return bloco(`saude-${p.id}`, `${esc(p.nome)} <small class="muted">uso esporádico</small>`,
+        aps.length ? `<div class="table-wrap"><table class="table">
+          <thead><tr><th>Data</th><th>Em</th><th>Dose</th></tr></thead>
+          <tbody>${mostra.map((x) => `<tr${canEdit() ? ` class="clickable" data-act="aplicacao-edit" data-id="${x.id}"` : ''}>
+            <td>${esc(fmtDate(x.data))}</td>
+            <td>${x.animal_id ? `<a href="#/animal/${x.animal_id}">${esc(alvoAplicacao(x))}</a>` : esc(alvoAplicacao(x))}${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td>
+            <td>${dose(numeroDose(x))}</td></tr>`).join('')}</tbody>
+        </table></div>
+        ${aps.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="esporadico-todos" data-id="${p.id}">Mostrar todas (${aps.length})</button>` : ''}`
+          : '<p class="muted">Nenhuma aplicação registrada.</p>');
+    }).join('');
+
     const hist = sortByDate(db.aplicacoes, 'data', true);
     const mostra = filters.histTodos ? hist : hist.slice(0, 15);
     const histHtml = hist.length
@@ -567,12 +584,14 @@
 
     const prodHtml = `<ul class="list">${produtos.map((p) => `<li class="list-row${canEdit() ? ' clickable' : ''}"${canEdit() ? ` data-act="produto-edit" data-id="${p.id}"` : ''}>
         <span><strong>${esc(p.nome)}</strong></span>
-        <span class="right"><small>${p.intervalo_dias ? `Reforço a cada ${p.intervalo_dias} dias` : 'Sem reforço no calendário'}</small></span></li>`).join('')}</ul>
+        <span class="right"><small>${p.intervalo_dias ? `Repetir a cada ${p.intervalo_dias} dias` : 'Uso esporádico'}</small></span></li>`).join('')}</ul>
       ${editBtn(`<button type="button" class="btn small" data-act="produto-new">${ICON.plus} Produto</button>`)}`;
 
-    return `${pageHead('Saúde', 'Calendário de vacinas e vermífugos dos animais no plantel',
+    return `${pageHead('Saúde', 'Vacinas e remédios: calendário dos de uso recorrente e aplicações dos de uso esporádico',
       editBtn(`<button type="button" class="btn primary" data-act="aplicacao-new">${ICON.syringe} Registrar aplicação</button>`))}
-      ${calHtml || '<p class="muted">Nenhum produto com reforço cadastrado.</p>'}
+      ${calHtml ? `<h2 class="group-title">Uso recorrente</h2>${calHtml}` : ''}
+      ${esporadicoHtml ? `<h2 class="group-title">Uso esporádico</h2>${esporadicoHtml}` : ''}
+      ${!calHtml && !esporadicoHtml ? '<p class="muted">Nenhuma vacina ou remédio cadastrado.</p>' : ''}
       <div class="two-col">
         ${bloco('saude-historico', 'Últimas aplicações', histHtml)}
         <section class="section card"><h2>Vacinas e remédios</h2>${prodHtml}</section>
@@ -1220,7 +1239,7 @@
       values: p || {},
       fields: [
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Verme' },
-        { name: 'intervalo_dias', label: 'Repetir a cada', type: 'number', suffix: 'dias', hint: 'Em branco = não aparece no calendário (ex.: Ferro nos leitões)' },
+        { name: 'intervalo_dias', label: 'Repetir a cada', type: 'number', suffix: 'dias', hint: 'Em branco = uso esporádico, sem calendário (ex.: Ferro nos leitões)' },
       ],
       onSave: async (v) => {
         if (v.intervalo_dias != null && (!Number.isInteger(v.intervalo_dias) || v.intervalo_dias <= 0)) throw new Error('O intervalo precisa ser um número inteiro de dias.');
@@ -1499,6 +1518,7 @@
     'filter-ano': (el) => { filters.ano = el.dataset.value; render(); },
     'lanc-todos': () => { filters.lancTodos = true; render(); },
     'hist-todos': () => { filters.histTodos = true; render(); },
+    'esporadico-todos': (el) => { filters.esporadicoTodos.add(el.dataset.id); render(); },
     'animal-new': () => formAnimal(null),
     'animal-edit': (el) => formAnimal(animal(el.dataset.id)),
     'gestacao-new': (el) => formGestacao(null, el.dataset.matriz),
@@ -1537,6 +1557,9 @@
   view.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
     if (!el || !view.contains(el)) return;
+    // Link dentro de uma linha clicável: segue o link em vez de abrir a edição
+    const link = e.target.closest('a[href]');
+    if (link && el.contains(link) && link !== el) return;
     const fn = ACTIONS[el.dataset.act];
     if (fn) {
       e.preventDefault();
