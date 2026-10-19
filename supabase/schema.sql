@@ -191,8 +191,13 @@ create table if not exists public.porcos_abates (
   id uuid primary key default gen_random_uuid(),
   data date not null,
   animal_id uuid references public.porcos_animais (id) on delete set null,
+  -- partes: [{ "parte": "Carne", "kg": 75, "preco": 20, "valor": 1500 }, ...]
+  -- preco = R$ por kg (opcional); valor = valor da parte (kg × preço, ou digitado)
+  itens jsonb not null default '[]'::jsonb check (jsonb_typeof(itens) = 'array'),
+  -- kg de carne e toucinho (copiados das partes, para consultas simples)
   carne_kg numeric(10, 2),
   toucinho_kg numeric(10, 2),
+  -- valor total do abate (soma das partes, ou digitado quando as partes não têm valor)
   valor numeric(12, 2),
   obs text not null default '',
   criado_em timestamptz not null default now(),
@@ -200,6 +205,8 @@ create table if not exists public.porcos_abates (
   atualizado_por uuid default auth.uid() references auth.users (id) on delete set null
 );
 create index if not exists porcos_abates_animal_idx on public.porcos_abates (animal_id);
+-- Para quem criou a tabela antes das partes
+alter table public.porcos_abates add column if not exists itens jsonb not null default '[]'::jsonb;
 
 -- Gastos e receitas
 create table if not exists public.porcos_lancamentos (

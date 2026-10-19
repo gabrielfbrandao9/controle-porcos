@@ -128,6 +128,20 @@
     return g ? `Crias da ${nomeAnimal(g.matriz_id)} (${ordinal(numeroGestacao(g))} gestação)` : '—';
   }
 
+  // Partes de um abate: [{ parte, kg, preco (R$/kg), valor }]. O total do abate fica em "valor".
+  const PARTES_SUGERIDAS = ['Carne', 'Toucinho', 'Costela', 'Lombo', 'Pernil', 'Paleta', 'Banha', 'Cabeça', 'Pés', 'Miúdos', 'Fígado', 'Couro', 'Linguiça'];
+  const partesAbate = (ab) => (ab.itens || []).filter((i) => i && i.parte);
+  const pesoAbate = (ab) => partesAbate(ab).reduce((s, i) => s + Number(i.kg || 0), 0);
+  const kgParte = (ab, nome) => partesAbate(ab).filter((i) => i.parte.toLowerCase() === nome.toLowerCase()).reduce((s, i) => s + Number(i.kg || 0), 0);
+
+  function resumoPartes(ab) {
+    return partesAbate(ab).map((i) => [
+      i.parte,
+      i.kg != null ? fmtKg(i.kg) : '',
+      i.preco != null ? `a ${fmtMoney(i.preco)}/kg` : (i.valor != null ? fmtMoney(i.valor) : ''),
+    ].filter(Boolean).join(' ')).join(' · ');
+  }
+
   // Calendário: para cada animal no plantel e produto com reforço, a última e a próxima aplicação.
   function calendario() {
     const rows = [];
@@ -370,11 +384,12 @@
     }
 
     const abate = db.abates.find((x) => x.animal_id === a.id);
-    const abateHtml = abate ? `<section class="section card"><h2>Abate</h2>
+    const abateHtml = abate ? `<section class="section card"><div class="section-head"><h2>Abate</h2>
+          ${editBtn(`<button type="button" class="btn small" data-act="abate-edit" data-id="${abate.id}">${ICON.edit} Editar</button>`)}</div>
         <dl class="info"><div><dt>Data</dt><dd>${esc(fmtDate(abate.data))}</dd></div>
-        <div><dt>Carne</dt><dd>${esc(fmtKg(abate.carne_kg))}</dd></div>
-        <div><dt>Toucinho</dt><dd>${esc(fmtKg(abate.toucinho_kg))}</dd></div>
-        <div><dt>Valor</dt><dd>${esc(fmtMoney(abate.valor))}</dd></div></dl></section>` : '';
+        <div><dt>Peso</dt><dd>${esc(fmtKg(pesoAbate(abate)))}</dd></div>
+        <div><dt>Valor</dt><dd>${esc(fmtMoney(abate.valor))}</dd></div></dl>
+        ${partesAbate(abate).length ? partesTabela(abate) : ''}</section>` : '';
 
     return `<a class="back" href="#/animais">${ICON.back} Animais</a>
       <div class="hero card">
@@ -598,17 +613,19 @@
         ${lista.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="lanc-todos">Mostrar todos (${lista.length})</button>` : ''}`
       : '<p class="muted">Nenhum lançamento.</p>';
 
-    const carne = abates.reduce((s, a) => s + Number(a.carne_kg || 0), 0);
-    const touc = abates.reduce((s, a) => s + Number(a.toucinho_kg || 0), 0);
+    const carne = abates.reduce((s, a) => s + kgParte(a, 'Carne'), 0);
+    const peso = abates.reduce((s, a) => s + pesoAbate(a), 0);
     const valorAbates = abates.reduce((s, a) => s + Number(a.valor || 0), 0);
     const abatesHtml = abates.length
       ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Data</th><th>Animal</th><th class="num">Carne</th><th class="num">Toucinho</th><th class="num">Valor</th></tr></thead>
+          <thead><tr><th>Data</th><th>Animal</th><th>Partes</th><th class="num">Peso</th><th class="num">Valor</th></tr></thead>
           <tbody>${abates.map((a) => `<tr${canEdit() ? ` class="clickable" data-act="abate-edit" data-id="${a.id}"` : ''}>
             <td>${esc(fmtDate(a.data))}</td><td>${a.animal_id ? esc(nomeAnimal(a.animal_id)) : '<span class="muted">—</span>'}</td>
-            <td class="num">${esc(fmtKg(a.carne_kg))}</td><td class="num">${esc(fmtKg(a.toucinho_kg))}</td><td class="num">${esc(fmtMoney(a.valor))}</td></tr>`).join('')}</tbody>
-          <tfoot><tr><th scope="row" colspan="2">Total</th><td class="num">${esc(fmtKg(carne))}</td><td class="num">${esc(fmtKg(touc))}</td><td class="num">${esc(fmtMoney(valorAbates))}</td></tr></tfoot>
-        </table></div>`
+            <td class="partes-cell">${partesAbate(a).length ? esc(resumoPartes(a)) : '<span class="muted">—</span>'}</td>
+            <td class="num">${partesAbate(a).length ? esc(fmtKg(pesoAbate(a))) : '—'}</td><td class="num">${esc(fmtMoney(a.valor))}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><th scope="row" colspan="3">Total</th><td class="num">${esc(fmtKg(peso))}</td><td class="num">${esc(fmtMoney(valorAbates))}</td></tr></tfoot>
+        </table></div>
+        ${porParteHtml(abates)}`
       : '<p class="muted">Nenhum abate.</p>';
 
     const chip = (v, label) => `<button type="button" class="chip${ano === v ? ' on' : ''}" data-act="filter-ano" data-value="${v}">${label}</button>`;
@@ -620,7 +637,7 @@
         ${stat('Despesas', fmtMoney(t.despesas), `Ração ${fmtMoney(t.racao)} · Soro ${fmtMoney(t.soro)}`)}
         ${stat('Receitas', fmtMoney(t.receitas), 'Vendas', 'pos')}
         ${stat('Saldo', fmtMoney(t.saldo), t.margem != null ? `Margem de ${fmtPct(t.margem)}` : '', t.saldo < 0 ? 'neg' : 'pos')}
-        ${stat('Carne abatida', fmtKg(carne), `${plural(abates.length, 'abate', 'abates')} · ${fmtMoney(valorAbates)}`)}
+        ${stat('Carne abatida', fmtKg(carne), `${plural(abates.length, 'abate', 'abates')} · ${fmtKg(peso)} no total · ${fmtMoney(valorAbates)}`)}
       </div>
       <section class="section card"><h2>Por mês</h2>
         ${meses.size ? `<div class="table-wrap"><table class="table">
@@ -632,6 +649,42 @@
       </section>
       <section class="section card"><h2>Lançamentos</h2>${lancHtml}</section>
       <section class="section card"><h2>Abates</h2>${abatesHtml}</section>`;
+  }
+
+  // Tabela das partes de um abate
+  function partesTabela(ab) {
+    return `<div class="table-wrap"><table class="table compact partes-table">
+      <thead><tr><th>Parte</th><th class="num">Peso</th><th class="num">Preço/kg</th><th class="num">Valor</th></tr></thead>
+      <tbody>${partesAbate(ab).map((i) => `<tr><th scope="row">${esc(i.parte)}</th><td class="num">${esc(fmtKg(i.kg))}</td>
+        <td class="num">${esc(fmtMoney(i.preco))}</td><td class="num">${esc(fmtMoney(i.valor))}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  }
+
+  // Soma de cada parte nos abates do período, com o preço médio de quem tem valor
+  function porParteHtml(abates) {
+    const m = new Map();
+    abates.forEach((a) => partesAbate(a).forEach((i) => {
+      const k = i.parte.trim();
+      const key = k.toLowerCase();
+      if (!m.has(key)) m.set(key, { parte: k, kg: 0, valor: 0, kgComValor: 0, temValor: false });
+      const x = m.get(key);
+      x.kg += Number(i.kg || 0);
+      if (i.valor != null) {
+        x.temValor = true;
+        x.valor += Number(i.valor);
+        x.kgComValor += Number(i.kg || 0);
+      }
+    }));
+    if (m.size < 2 && ![...m.values()].some((x) => x.temValor)) return '';
+    const rows = [...m.values()].sort((a, b) => b.kg - a.kg);
+    return `<h3 class="sub-title">Por parte</h3>
+      <div class="table-wrap"><table class="table compact">
+        <thead><tr><th>Parte</th><th class="num">Peso</th><th class="num">Valor</th><th class="num">Preço médio/kg</th></tr></thead>
+        <tbody>${rows.map((x) => `<tr><th scope="row">${esc(x.parte)}</th><td class="num">${esc(fmtKg(x.kg))}</td>
+          <td class="num">${x.temValor ? esc(fmtMoney(x.valor)) : '—'}</td>
+          <td class="num">${x.temValor && x.kgComValor > 0 ? esc(fmtMoney(x.valor / x.kgComValor)) : '—'}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="muted small">Valor e preço médio só contam as partes lançadas com preço. Abates antigos têm só o valor total.</p>`;
   }
 
   // ---------- Conta e acesso ----------
@@ -1089,21 +1142,26 @@
       fields: [
         { name: 'data', label: 'Data', type: 'date', half: true, required: true },
         { name: 'animal_id', label: 'Animal', type: 'select', half: true, options: animalOptions(opcoes, '— (não informado)') },
-        { name: 'carne_kg', label: 'Carne', type: 'number', half: true, suffix: 'kg' },
-        { name: 'toucinho_kg', label: 'Toucinho', type: 'number', half: true, suffix: 'kg' },
-        { name: 'valor', label: 'Valor', type: 'money' },
-        { name: 'lancar', label: 'Lançar o valor como receita em Finanças', type: 'checkbox', showIf: (v) => !ab && v.valor > 0 },
+        { name: 'lancar', label: 'Lançar o valor total como receita em Finanças', type: 'checkbox', showIf: () => !ab },
         { name: 'obs', label: 'Observações', type: 'textarea' },
       ],
       onSave: async (v) => {
-        const row = { data: v.data, animal_id: v.animal_id || null, carne_kg: v.carne_kg, toucinho_kg: v.toucinho_kg, valor: v.valor, obs: v.obs };
+        const { itens, total } = lerPartes();
+        const kgDe = (nome) => {
+          const list = itens.filter((i) => i.parte.toLowerCase() === nome && i.kg != null);
+          return list.length ? list.reduce((s, i) => s + i.kg, 0) : null;
+        };
+        const row = {
+          data: v.data, animal_id: v.animal_id || null, itens, valor: total, obs: v.obs,
+          carne_kg: kgDe('carne'), toucinho_kg: kgDe('toucinho'),
+        };
         await save('abates', ab && ab.id, row);
         const a = row.animal_id && animal(row.animal_id);
         if (a && (!a.saida || a.saida === 'abate') && a.saida_data !== row.data) {
           await save('animais', a.id, { saida: 'abate', saida_data: row.data });
         }
-        if (!ab && v.lancar && v.valor > 0) {
-          await save('lancamentos', null, { data: row.data, tipo: 'receita', categoria: 'venda', descricao: `Abate${a ? `: ${a.nome}` : ''}`, valor: v.valor });
+        if (!ab && v.lancar && total > 0) {
+          await save('lancamentos', null, { data: row.data, tipo: 'receita', categoria: 'venda', descricao: `Abate${a ? `: ${a.nome}` : ''}`, valor: total });
         }
         return ab ? 'Alterações salvas' : 'Abate registrado';
       },
@@ -1112,7 +1170,89 @@
         return 'Abate excluído';
       } : null,
     });
+
+    // Partes: uma linha por parte, com peso, preço por kg e valor (peso × preço, ou digitado)
+    const partes = ab ? partesAbate(ab) : [{ parte: 'Carne' }, { parte: 'Toucinho' }];
+    const linha = (i = {}) => `<div class="parte-row">
+      <input class="p-nome" name="parte_nome" list="partesLista" value="${esc(i.parte || '')}" placeholder="Parte" aria-label="Parte" autocomplete="off">
+      <span class="input-affix p-kg"><input name="parte_kg" inputmode="decimal" value="${esc(toInput(i.kg))}" aria-label="Peso" autocomplete="off"><i>kg</i></span>
+      <span class="input-affix p-preco"><i>R$</i><input name="parte_preco" inputmode="decimal" value="${esc(toInput(i.preco))}" aria-label="Preço por kg" placeholder="/kg" autocomplete="off"></span>
+      <span class="input-affix p-valor"><i>R$</i><input name="parte_valor" inputmode="decimal" value="${esc(toInput(i.valor))}" aria-label="Valor da parte" placeholder="valor" autocomplete="off"></span>
+      <button type="button" class="icon p-del" data-remove-parte aria-label="Tirar parte">×</button>
+    </div>`;
+    $('[data-field="lancar"]', form).insertAdjacentHTML('beforebegin', `<div class="field partes">
+      <span>Partes</span>
+      <div class="parte-head" aria-hidden="true"><span>Parte</span><span>Peso</span><span>Preço/kg</span><span>Valor</span><span></span></div>
+      <div id="partesItens">${partes.map(linha).join('')}</div>
+      <datalist id="partesLista">${PARTES_SUGERIDAS.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
+      <button type="button" class="btn small ghost" data-add-parte>${ICON.plus} Parte</button>
+      <small class="hint">Com peso e preço por kg, o valor da parte é calculado. Sem preço, dá para digitar o valor direto.</small>
+      <label class="field total-abate"><span>Valor total</span>
+        <span class="input-affix"><i>R$</i><input name="abate_total" inputmode="decimal" value="${esc(toInput(ab && ab.valor))}" autocomplete="off"></span>
+        <small class="hint" id="totalHint"></small></label>
+    </div>`);
+
+    const num = (el) => parseNum(el.value);
+    const round2 = (n) => Math.round(n * 100) / 100;
+    function recalcular() {
+      let soma = 0;
+      let algum = false;
+      $$('.parte-row', form).forEach((r) => {
+        const kg = num($('[name=parte_kg]', r));
+        const preco = num($('[name=parte_preco]', r));
+        const valor = $('[name=parte_valor]', r);
+        if (kg != null && preco != null && !Number.isNaN(kg) && !Number.isNaN(preco)) {
+          valor.value = toInput(round2(kg * preco));
+          valor.readOnly = true;
+        } else if (valor.readOnly) {
+          valor.value = '';
+          valor.readOnly = false;
+        }
+        const v = num(valor);
+        if (v != null && !Number.isNaN(v)) {
+          soma += v;
+          algum = true;
+        }
+      });
+      const total = $('[name=abate_total]', form);
+      total.readOnly = algum;
+      if (algum) total.value = toInput(round2(soma));
+      $('#totalHint').textContent = algum ? 'Soma das partes.' : 'Sem valor nas partes: digite o valor total do abate.';
+    }
+
+    lerPartes = () => {
+      const itens = $$('.parte-row', form).map((r) => ({
+        parte: $('[name=parte_nome]', r).value.trim(),
+        kg: num($('[name=parte_kg]', r)),
+        preco: num($('[name=parte_preco]', r)),
+        valor: num($('[name=parte_valor]', r)),
+      })).filter((i) => i.parte);
+      if (itens.some((i) => [i.kg, i.preco, i.valor].some((x) => Number.isNaN(x) || (x != null && x < 0)))) {
+        throw new Error('Confira os números das partes.');
+      }
+      const total = num($('[name=abate_total]', form));
+      if (Number.isNaN(total) || (total != null && total < 0)) throw new Error('Valor total inválido.');
+      return { itens, total: itens.some((i) => i.valor != null) ? round2(itens.reduce((s, i) => s + (i.valor || 0), 0)) : total };
+    };
+
+    recalcular();
+    form.oninput = (e) => { if (e.target.closest('.parte-row')) recalcular(); };
+    form.onclick = (e) => {
+      if (e.target.closest('[data-add-parte]')) {
+        $('#partesItens').insertAdjacentHTML('beforeend', linha());
+        $('#partesItens .parte-row:last-child input').focus();
+      }
+      const rm = e.target.closest('[data-remove-parte]');
+      if (rm) {
+        rm.closest('.parte-row').remove();
+        recalcular();
+      }
+    };
+    dlg.addEventListener('close', () => { form.oninput = null; form.onclick = null; }, { once: true });
   }
+
+  // Lê as partes do formulário de abate aberto (definida por formAbate)
+  let lerPartes = () => ({ itens: [], total: null });
 
   // Fórmula de ração: lista de ingredientes com porcentagem
   function formRacao(r) {
