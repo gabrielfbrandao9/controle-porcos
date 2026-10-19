@@ -7,17 +7,15 @@ As tabelas dele começam com `porcos_` e não mexem nas dos outros sites.
 O banco já foi criado e os dados da planilha **Porcos** já foram importados. Este arquivo serve
 para consulta ou para refazer tudo num projeto novo.
 
-## Liberar o endereço do site (falta fazer)
+## Endereço do site liberado no login
 
-Em **Authentication** → **URL Configuration** → **Redirect URLs**, adicione:
+Em **Authentication** → **URL Configuration** → **Redirect URLs** estão (desde 19/10/2026):
 
 - `https://gabrielfbrandao9.github.io/controle-porcos/**`
 - `http://localhost:8770/**`, para testar no computador.
 
-Não mude o **Site URL** (continua sendo o do Otimizador). Sem esse endereço na lista, o Google
-devolve a pessoa para o Otimizador depois do login; como os sites ficam no mesmo endereço
-(`gabrielfbrandao9.github.io`), basta voltar para o Controle de Porcos que ela já aparece conectada,
-mas é melhor liberar.
+O **Site URL** continua sendo o do Otimizador. Sem esse endereço na lista, o Google devolveria a
+pessoa para o Otimizador depois do login.
 
 ## Quem pode ver e editar
 
