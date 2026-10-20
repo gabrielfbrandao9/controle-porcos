@@ -166,21 +166,25 @@
   }
 
   // Calendário: para cada animal no plantel e produto com reforço, a última e a próxima aplicação.
-  function calendario() {
+  // todos = true inclui os que saíram do plantel e tomaram o produto (sem próxima dose).
+  function calendario(todos = false) {
     const rows = [];
     const produtos = produtosOrdenados().filter((p) => p.intervalo_dias);
     for (const p of produtos) {
-      for (const a of sortAnimais(db.animais.filter(noPlantel))) {
-        const aps = db.aplicacoes.filter((x) => x.animal_id === a.id && x.produto_id === p.id);
-        const ultima = aps.reduce((m, x) => (x.data > m ? x.data : m), '');
-        const proxima = ultima ? addDays(ultima, p.intervalo_dias) : null;
-        rows.push({ produto: p, animal: a, ultima: ultima || null, proxima, faltam: proxima ? daysUntil(proxima) : null, doses: aps.length });
+      for (const a of sortAnimais(db.animais.filter((x) => todos || noPlantel(x)))) {
+        const aps = sortByDate(db.aplicacoes.filter((x) => x.animal_id === a.id && x.produto_id === p.id));
+        const saiu = !noPlantel(a);
+        if (saiu && !aps.length) continue;
+        const ultima = aps.length ? aps[aps.length - 1].data : null;
+        const proxima = ultima && !saiu ? addDays(ultima, p.intervalo_dias) : null;
+        rows.push({ produto: p, animal: a, aps, ultima, proxima, faltam: proxima ? daysUntil(proxima) : null, doses: aps.length, saiu });
       }
     }
     return rows;
   }
 
   function badgeVacina(r) {
+    if (r.saiu) return `<span class="badge muted">${esc(statusAnimal(r.animal))} em ${esc(fmtDate(r.animal.saida_data))}</span>`;
     if (r.faltam == null) return '<span class="badge muted">Sem registro</span>';
     if (r.faltam < 0) return `<span class="badge danger">Atrasada · ${-r.faltam} ${r.faltam === -1 ? 'dia' : 'dias'}</span>`;
     if (r.faltam <= AVISO_DIAS) return `<span class="badge warn">${r.faltam === 0 ? 'Hoje' : `Faltam ${plural(r.faltam, 'dia', 'dias')}`}</span>`;
@@ -536,8 +540,34 @@
 
   // ---------- Saúde ----------
 
+  // Opções da aba Saúde, guardadas neste aparelho
+  const SAUDE_KEY = 'porcos:saude';
+  const saudeOpcoes = (() => {
+    const padrao = { doses: false, animais: 'plantel' };
+    try {
+      return { ...padrao, ...JSON.parse(localStorage.getItem(SAUDE_KEY) || '{}') };
+    } catch (e) {
+      return padrao;
+    }
+  })();
+
+  function setSaude(k, v) {
+    saudeOpcoes[k] = v;
+    try {
+      localStorage.setItem(SAUDE_KEY, JSON.stringify(saudeOpcoes));
+    } catch (e) { /* sem armazenamento: vale até fechar o site */ }
+    render();
+  }
+
+  // Aplicação aparece com o filtro de animais? (crias sempre aparecem)
+  const apNoFiltro = (x) => saudeOpcoes.animais === 'todos' || !x.animal_id || noPlantel(animal(x.animal_id) || {});
+
+  const dosesChips = (aps) => `<div class="dose-list">${aps.map((x, k) => doseChip(x, `${dose(k + 1)} · ${fmtDate(x.data)}`)).join('')}</div>`;
+
   function renderSaude() {
-    const cal = calendario();
+    const todos = saudeOpcoes.animais === 'todos';
+    const comDoses = saudeOpcoes.doses;
+    const cal = calendario(todos);
     const produtos = produtosOrdenados();
     const comReforco = produtos.filter((p) => p.intervalo_dias);
 
@@ -545,32 +575,65 @@
       const rows = cal.filter((r) => r.produto.id === p.id);
       return bloco(`saude-${p.id}`, `${esc(p.nome)} <small class="muted">a cada ${p.intervalo_dias} dias</small>`,
         rows.length ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Animal</th><th>Última</th><th>Próxima</th><th>Situação</th></tr></thead>
-          <tbody>${rows.map((r) => `<tr><th scope="row"><a href="#/animal/${r.animal.id}">${esc(r.animal.nome)}</a></th>
+          <thead><tr><th>Animal</th>${comDoses ? '<th>Doses aplicadas</th>' : ''}<th>Última</th><th>Próxima</th><th>Situação</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr${r.saiu ? ' class="saiu"' : ''}><th scope="row"><a href="#/animal/${r.animal.id}">${esc(r.animal.nome)}</a></th>
+            ${comDoses ? `<td>${r.aps.length ? dosesChips(r.aps) : '<span class="muted">—</span>'}</td>` : ''}
             <td>${esc(fmtDate(r.ultima))}${r.doses ? `<small class="muted block">${dose(r.doses)}</small>` : ''}</td>
             <td>${esc(fmtDate(r.proxima))}${r.proxima ? `<small class="muted block">${dose(r.doses + 1)}</small>` : ''}</td>
             <td>${badgeVacina(r)}</td></tr>`).join('')}</tbody>
-        </table></div>` : '<p class="muted">Nenhum animal no plantel.</p>');
+        </table></div>` : `<p class="muted">${todos ? 'Nenhum animal.' : 'Nenhum animal no plantel.'}</p>`);
     }).join('');
 
-    // Produtos sem "repetir a cada": uso esporádico, mostra as aplicações feitas
+    // Produtos sem "repetir a cada": uso esporádico, mostra as aplicações feitas.
+    // Com "Mostrar doses aplicadas", uma linha por animal (ou cria) com todas as doses.
     const esporadicoHtml = produtos.filter((p) => !p.intervalo_dias).map((p) => {
-      const aps = sortByDate(db.aplicacoes.filter((x) => x.produto_id === p.id), 'data', true);
-      const todas = filters.esporadicoTodos.has(p.id);
-      const mostra = todas ? aps : aps.slice(0, 10);
-      return bloco(`saude-${p.id}`, `${esc(p.nome)} <small class="muted">uso esporádico</small>`,
-        aps.length ? `<div class="table-wrap"><table class="table">
+      const aps = sortByDate(db.aplicacoes.filter((x) => x.produto_id === p.id && apNoFiltro(x)), 'data', true);
+      let corpo;
+      if (!aps.length) {
+        corpo = '<p class="muted">Nenhuma aplicação registrada.</p>';
+      } else if (comDoses) {
+        const grupos = new Map();
+        [...aps].reverse().forEach((x) => {
+          const k = x.animal_id || `g:${x.gestacao_id}`;
+          if (!grupos.has(k)) grupos.set(k, []);
+          grupos.get(k).push(x);
+        });
+        const linhas = [...grupos.values()].sort((a, b) => b[b.length - 1].data.localeCompare(a[a.length - 1].data));
+        corpo = `<div class="table-wrap"><table class="table">
+          <thead><tr><th>Em</th><th>Doses aplicadas</th><th>Última</th></tr></thead>
+          <tbody>${linhas.map((list) => {
+            const x = list[0];
+            const a = x.animal_id && animal(x.animal_id);
+            return `<tr${a && !noPlantel(a) ? ' class="saiu"' : ''}>
+              <th scope="row">${x.animal_id ? `<a href="#/animal/${x.animal_id}">${esc(alvoAplicacao(x))}</a>` : esc(alvoAplicacao(x))}
+                ${a && !noPlantel(a) ? `<small class="muted block">${esc(statusAnimal(a))}</small>` : ''}</th>
+              <td>${dosesChips(list)}</td><td>${esc(fmtDate(list[list.length - 1].data))}</td></tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
+      } else {
+        const mostra = filters.esporadicoTodos.has(p.id) ? aps : aps.slice(0, 10);
+        corpo = `<div class="table-wrap"><table class="table">
           <thead><tr><th>Data</th><th>Em</th><th>Dose</th></tr></thead>
           <tbody>${mostra.map((x) => `<tr${canEdit() ? ` class="clickable" data-act="aplicacao-edit" data-id="${x.id}"` : ''}>
             <td>${esc(fmtDate(x.data))}</td>
             <td>${x.animal_id ? `<a href="#/animal/${x.animal_id}">${esc(alvoAplicacao(x))}</a>` : esc(alvoAplicacao(x))}${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td>
             <td>${dose(numeroDose(x))}</td></tr>`).join('')}</tbody>
         </table></div>
-        ${aps.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="esporadico-todos" data-id="${p.id}">Mostrar todas (${aps.length})</button>` : ''}`
-          : '<p class="muted">Nenhuma aplicação registrada.</p>');
+        ${aps.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="esporadico-todos" data-id="${p.id}">Mostrar todas (${aps.length})</button>` : ''}`;
+      }
+      return bloco(`saude-${p.id}`, `${esc(p.nome)} <small class="muted">uso esporádico</small>`, corpo);
     }).join('');
 
-    const hist = sortByDate(db.aplicacoes, 'data', true);
+    const opcoesHtml = `<div class="calc-bar card saude-opcoes">
+        <label class="check"><input type="checkbox" data-act-change="saude-doses"${comDoses ? ' checked' : ''}><span>Mostrar doses aplicadas</span></label>
+        <div class="calc-field"><span class="calc-label">Animais</span>
+          <div class="seg" role="group" aria-label="Quais animais">
+            <button type="button" class="${todos ? '' : 'on'}" aria-pressed="${!todos}" data-act="saude-animais" data-value="plantel">No plantel</button>
+            <button type="button" class="${todos ? 'on' : ''}" aria-pressed="${todos}" data-act="saude-animais" data-value="todos">Todos</button>
+          </div></div>
+      </div>`;
+
+    const hist = sortByDate(db.aplicacoes.filter(apNoFiltro), 'data', true);
     const mostra = filters.histTodos ? hist : hist.slice(0, 15);
     const histHtml = hist.length
       ? `<div class="table-wrap"><table class="table">
@@ -589,6 +652,7 @@
 
     return `${pageHead('Saúde', 'Vacinas e remédios: calendário dos de uso recorrente e aplicações dos de uso esporádico',
       editBtn(`<button type="button" class="btn primary" data-act="aplicacao-new">${ICON.syringe} Registrar aplicação</button>`))}
+      ${opcoesHtml}
       ${calHtml ? `<h2 class="group-title">Uso recorrente</h2>${calHtml}` : ''}
       ${esporadicoHtml ? `<h2 class="group-title">Uso esporádico</h2>${esporadicoHtml}` : ''}
       ${!calHtml && !esporadicoHtml ? '<p class="muted">Nenhuma vacina ou remédio cadastrado.</p>' : ''}
@@ -1575,6 +1639,7 @@
     'racao-edit': (el) => formRacao(byId('racoes', el.dataset.id)),
     'racao-modo': (el) => { racaoModo = el.dataset.value; render(); },
     bloco: (el) => toggleBloco(el),
+    'saude-animais': (el) => setSaude('animais', el.dataset.value),
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
@@ -1611,6 +1676,10 @@
     if (e.target.id === 'racaoIng') {
       racaoIng = e.target.value;
       render();
+      return;
+    }
+    if (e.target.matches('[data-act-change="saude-doses"]')) {
+      setSaude('doses', e.target.checked);
       return;
     }
     const el = e.target.closest('[data-act-change="acesso-papel"]');
