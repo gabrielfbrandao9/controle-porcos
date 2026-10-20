@@ -509,6 +509,11 @@ dialog::backdrop { background: rgba(30, 18, 10, 0.45); }
 .doses .btn { align-self: flex-start; }
 #dosesExtras { display: grid; gap: 8px; }
 #dosesExtras:empty { display: none; }
+.ja-aplicadas { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
+.ja-aplicadas p { margin: 0; }
+.checks .check { align-items: flex-start; padding: 4px 0; }
+.checks .check input { margin-top: 2px; }
+.checks .check small { font-size: 0.75rem; }
 .dose-row { display: grid; grid-template-columns: minmax(0, 260px) 40px; gap: 6px; align-items: end; }
 
 .items { display: grid; gap: 6px; }

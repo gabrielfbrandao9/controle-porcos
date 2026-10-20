@@ -1178,7 +1178,7 @@
 
     const fields = [
       { name: 'produto_id', label: 'Produto', type: 'select', half: true, required: true, options: produtos.map((p) => [p.id, p.nome]) },
-      { name: 'data', label: novo ? 'Data da 1ª dose' : 'Data', type: 'date', half: true, required: true },
+      { name: 'data', label: 'Data', type: 'date', half: true, required: true },
     ];
     if (varios) fields.push({ name: 'animais', label: 'Em quais animais', type: 'checkboxes', required: true, options: animalOptions(plantel) });
     fields.push({ name: 'obs', label: 'Observações', type: 'textarea', placeholder: 'Dose, lote...' });
@@ -1214,23 +1214,63 @@
     $('[data-field="data"]', form).insertAdjacentHTML('afterend', `<div class="field doses">
       <div id="dosesExtras"></div>
       <button type="button" class="btn small ghost" data-add-dose>${ICON.plus} Outra dose</button>
-    </div>`);
-    const renumerar = () => $$('.dose-row', form).forEach((r, k) => { $('span', r).textContent = `Data da ${ordinal(k + 2)} dose`; });
+    </div>
+    ${varios ? '' : '<div class="field ja-aplicadas" id="jaAplicadas"></div>'}`);
+
+    // Doses que o alvo já tem do produto escolhido
+    const dosesDe = (alvoId, campo) => sortByDate(db.aplicacoes.filter((x) => x.produto_id === form.elements.produto_id.value && x[campo] === alvoId));
+
+    // Mostra as doses já registradas e numera os campos a partir da dose seguinte
+    function atualizarDoses() {
+      const nomeP = (produto(form.elements.produto_id.value) || {}).nome || '';
+      let base = null; // quantas doses o alvo já tem (null = animais com quantidades diferentes)
+      if (varios) {
+        const marcados = [];
+        $$('input[name="animais"]', form).forEach((i) => {
+          const n = dosesDe(i.value, 'animal_id').length;
+          const ultima = n ? dosesDe(i.value, 'animal_id')[n - 1].data : null;
+          const span = $('span', i.closest('.check'));
+          let info = $('small', span);
+          if (!info) {
+            span.insertAdjacentHTML('beforeend', '<small class="muted block"></small>');
+            info = $('small', span);
+          }
+          info.textContent = n ? `${plural(n, 'dose', 'doses')} · última ${fmtDate(ultima)}` : 'nenhuma dose';
+          if (i.checked) marcados.push(n);
+        });
+        const lista = marcados.length ? marcados : [];
+        base = lista.length && lista.every((n) => n === lista[0]) ? lista[0] : null;
+      } else {
+        const aps = alvo.animal ? dosesDe(alvo.animal, 'animal_id') : dosesDe(alvo.gestacao, 'gestacao_id');
+        base = aps.length;
+        $('#jaAplicadas').innerHTML = `<span>Já registradas de ${esc(nomeP)}</span>
+          ${aps.length ? `<div class="dose-list">${aps.map((x, k) => `<span class="dose">${dose(k + 1)} · ${esc(fmtDate(x.data))}</span>`).join('')}</div>`
+            : `<p class="muted small">Nenhuma dose de ${esc(nomeP)} registrada ainda.</p>`}`;
+      }
+      const rotulo = (k) => (base == null
+        ? (k === 0 ? 'Data da próxima dose' : 'Data da dose seguinte')
+        : `Data da ${dose(base + 1 + k)}`);
+      $('[data-field="data"] > span', form).textContent = rotulo(0);
+      $$('.dose-row', form).forEach((r, k) => { $('span', r).textContent = rotulo(k + 1); });
+    }
+
+    atualizarDoses();
+    form.onchange = atualizarDoses;
     form.onclick = (e) => {
       if (e.target.closest('[data-add-dose]')) {
         $('#dosesExtras').insertAdjacentHTML('beforeend', `<div class="dose-row"><label class="field"><span></span>
           <input type="date" name="data_extra"></label>
           <button type="button" class="icon" data-remove-dose aria-label="Tirar esta dose">×</button></div>`);
-        renumerar();
+        atualizarDoses();
         $('#dosesExtras .dose-row:last-child input').focus();
       }
       const rm = e.target.closest('[data-remove-dose]');
       if (rm) {
         rm.closest('.dose-row').remove();
-        renumerar();
+        atualizarDoses();
       }
     };
-    dlg.addEventListener('close', () => { form.onclick = null; }, { once: true });
+    dlg.addEventListener('close', () => { form.onclick = null; form.onchange = null; }, { once: true });
   }
 
   function formProduto(p) {
