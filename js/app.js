@@ -559,8 +559,8 @@
     render();
   }
 
-  // Aplicação aparece com o filtro de animais? (crias sempre aparecem)
-  const apNoFiltro = (x) => saudeOpcoes.animais === 'todos' || !x.animal_id || noPlantel(animal(x.animal_id) || {});
+  // Aplicação aparece em Saúde? Só as dos animais (as das crias ficam em Crias), seguindo o filtro de animais.
+  const apNoFiltro = (x) => !!x.animal_id && (saudeOpcoes.animais === 'todos' || noPlantel(animal(x.animal_id) || {}));
 
   const dosesChips = (aps) => `<div class="dose-list">${aps.map((x, k) => doseChip(x, `${dose(k + 1)} · ${fmtDate(x.data)}`)).join('')}</div>`;
 
@@ -584,39 +584,39 @@
         </table></div>` : `<p class="muted">${todos ? 'Nenhum animal.' : 'Nenhum animal no plantel.'}</p>`);
     }).join('');
 
-    // Produtos sem "repetir a cada": uso esporádico, mostra as aplicações feitas.
-    // Com "Mostrar doses aplicadas", uma linha por animal (ou cria) com todas as doses.
+    // Produtos sem "repetir a cada": uso esporádico, mostra as aplicações feitas nos animais.
+    // Com "Mostrar doses aplicadas", uma linha por animal com todas as doses.
+    const nenhuma = `<p class="muted">Nenhuma aplicação em ${todos ? 'animais' : 'animais do plantel'}. As das crias ficam em <a href="#/crias">Crias</a>.</p>`;
     const esporadicoHtml = produtos.filter((p) => !p.intervalo_dias).map((p) => {
       const aps = sortByDate(db.aplicacoes.filter((x) => x.produto_id === p.id && apNoFiltro(x)), 'data', true);
       let corpo;
       if (!aps.length) {
-        corpo = '<p class="muted">Nenhuma aplicação registrada.</p>';
+        corpo = nenhuma;
       } else if (comDoses) {
         const grupos = new Map();
         [...aps].reverse().forEach((x) => {
-          const k = x.animal_id || `g:${x.gestacao_id}`;
-          if (!grupos.has(k)) grupos.set(k, []);
-          grupos.get(k).push(x);
+          if (!grupos.has(x.animal_id)) grupos.set(x.animal_id, []);
+          grupos.get(x.animal_id).push(x);
         });
         const linhas = [...grupos.values()].sort((a, b) => b[b.length - 1].data.localeCompare(a[a.length - 1].data));
         corpo = `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Em</th><th>Doses aplicadas</th><th>Última</th></tr></thead>
+          <thead><tr><th>Animal</th><th>Doses aplicadas</th><th>Última</th></tr></thead>
           <tbody>${linhas.map((list) => {
-            const x = list[0];
-            const a = x.animal_id && animal(x.animal_id);
-            return `<tr${a && !noPlantel(a) ? ' class="saiu"' : ''}>
-              <th scope="row">${x.animal_id ? `<a href="#/animal/${x.animal_id}">${esc(alvoAplicacao(x))}</a>` : esc(alvoAplicacao(x))}
-                ${a && !noPlantel(a) ? `<small class="muted block">${esc(statusAnimal(a))}</small>` : ''}</th>
+            const a = animal(list[0].animal_id) || {};
+            const saiu = !noPlantel(a);
+            return `<tr${saiu ? ' class="saiu"' : ''}>
+              <th scope="row"><a href="#/animal/${a.id}">${esc(a.nome || '—')}</a>
+                ${saiu ? `<small class="muted block">${esc(statusAnimal(a))}</small>` : ''}</th>
               <td>${dosesChips(list)}</td><td>${esc(fmtDate(list[list.length - 1].data))}</td></tr>`;
           }).join('')}</tbody>
         </table></div>`;
       } else {
         const mostra = filters.esporadicoTodos.has(p.id) ? aps : aps.slice(0, 10);
         corpo = `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Data</th><th>Em</th><th>Dose</th></tr></thead>
+          <thead><tr><th>Data</th><th>Animal</th><th>Dose</th></tr></thead>
           <tbody>${mostra.map((x) => `<tr${canEdit() ? ` class="clickable" data-act="aplicacao-edit" data-id="${x.id}"` : ''}>
             <td>${esc(fmtDate(x.data))}</td>
-            <td>${x.animal_id ? `<a href="#/animal/${x.animal_id}">${esc(alvoAplicacao(x))}</a>` : esc(alvoAplicacao(x))}${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td>
+            <td><a href="#/animal/${x.animal_id}">${esc(nomeAnimal(x.animal_id))}</a>${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td>
             <td>${dose(numeroDose(x))}</td></tr>`).join('')}</tbody>
         </table></div>
         ${aps.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="esporadico-todos" data-id="${p.id}">Mostrar todas (${aps.length})</button>` : ''}`;
@@ -637,13 +637,13 @@
     const mostra = filters.histTodos ? hist : hist.slice(0, 15);
     const histHtml = hist.length
       ? `<div class="table-wrap"><table class="table">
-          <thead><tr><th>Data</th><th>Produto</th><th>Em</th></tr></thead>
+          <thead><tr><th>Data</th><th>Produto</th><th>Animal</th></tr></thead>
           <tbody>${mostra.map((x) => `<tr${canEdit() ? ` class="clickable" data-act="aplicacao-edit" data-id="${x.id}"` : ''}>
             <td>${esc(fmtDate(x.data))}</td><td>${esc(nomeProduto(x))}<small class="muted block">${dose(numeroDose(x))}</small></td>
-            <td>${esc(alvoAplicacao(x))}${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td></tr>`).join('')}</tbody>
+            <td>${esc(nomeAnimal(x.animal_id))}${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td></tr>`).join('')}</tbody>
         </table></div>
         ${hist.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="hist-todos">Mostrar todas (${hist.length})</button>` : ''}`
-      : '<p class="muted">Nenhuma aplicação registrada.</p>';
+      : nenhuma;
 
     const prodHtml = `<ul class="list">${produtos.map((p) => `<li class="list-row${canEdit() ? ' clickable' : ''}"${canEdit() ? ` data-act="produto-edit" data-id="${p.id}"` : ''}>
         <span><strong>${esc(p.nome)}</strong></span>
