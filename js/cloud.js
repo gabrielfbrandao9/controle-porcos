@@ -1,6 +1,6 @@
 /*
- * Nuvem (Supabase): login com Google, leitura e gravação das tabelas "porcos_*"
- * e fotos dos animais (bucket "porcos-fotos").
+ * Nuvem (Supabase): login com Google, leitura e gravação das tabelas "porcos_*",
+ * fotos dos animais (bucket "porcos-fotos") e arquivos das bulas (bucket "porcos-bulas").
  * Quem pode ver ou editar é decidido no banco (tabela porcos_acesso + RLS):
  * o site só esconde os botões de quem não pode editar.
  */
@@ -10,6 +10,7 @@
   const cfg = global.APP_CONFIG || {};
   const client = global.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
   const BUCKET = 'porcos-fotos';
+  const BULAS = 'porcos-bulas';
   const TABLES = {
     animais: 'porcos_animais',
     gestacoes: 'porcos_gestacoes',
@@ -108,6 +109,23 @@
     async fotoUrls(paths) {
       if (!paths.length) return {};
       const rows = check(await client.storage.from(BUCKET).createSignedUrls(paths, 6 * 3600));
+      return Object.fromEntries(rows.filter((r) => r.signedUrl).map((r) => [r.path, r.signedUrl]));
+    },
+
+    // ---------- Bulas enviadas como arquivo ----------
+
+    async uploadBula(path, file) {
+      check(await client.storage.from(BULAS).upload(path, file, { contentType: file.type || 'application/pdf', upsert: true }));
+    },
+
+    async removeBulas(paths) {
+      if (paths.length) check(await client.storage.from(BULAS).remove(paths));
+    },
+
+    // { caminho: url temporária }
+    async bulaUrls(paths) {
+      if (!paths.length) return {};
+      const rows = check(await client.storage.from(BULAS).createSignedUrls(paths, 6 * 3600));
       return Object.fromEntries(rows.filter((r) => r.signedUrl).map((r) => [r.path, r.signedUrl]));
     },
 

@@ -174,15 +174,17 @@ create table if not exists public.porcos_produtos (
   nome text not null unique,
   -- de quantos em quantos dias repetir (null = não tem reforço no calendário)
   intervalo_dias int check (intervalo_dias > 0),
-  -- link da bula (vazio = sem bula)
+  -- bula: um link (vazio = sem link) ou um arquivo enviado (caminho no bucket porcos-bulas)
   bula text not null default '' check (bula = '' or (bula ~* '^https?://' and length(bula) <= 2000)),
+  bula_arquivo text,
   ordem int not null default 0,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now(),
   atualizado_por uuid default auth.uid() references auth.users (id) on delete set null
 );
--- Para quem criou a tabela antes do link da bula
+-- Para quem criou a tabela antes das bulas
 alter table public.porcos_produtos add column if not exists bula text not null default '';
+alter table public.porcos_produtos add column if not exists bula_arquivo text;
 
 -- Cada aplicação: num animal OU numa cria (leitegada)
 create table if not exists public.porcos_aplicacoes (
@@ -303,3 +305,32 @@ drop policy if exists "Porcos: apagar fotos" on storage.objects;
 create policy "Porcos: apagar fotos" on storage.objects
   for delete to authenticated
   using (bucket_id = 'porcos-fotos' and (select public.porcos_pode_editar()));
+
+-- ---------------------------------------------------------------------------
+-- Bulas enviadas como arquivo (PDF ou foto), até 20 MB cada
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('porcos-bulas', 'porcos-bulas', false, 20971520, array['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Porcos: ver bulas" on storage.objects;
+create policy "Porcos: ver bulas" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'porcos-bulas' and (select public.porcos_pode_ver()));
+
+drop policy if exists "Porcos: enviar bulas" on storage.objects;
+create policy "Porcos: enviar bulas" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'porcos-bulas' and (select public.porcos_pode_editar()));
+
+drop policy if exists "Porcos: trocar bulas" on storage.objects;
+create policy "Porcos: trocar bulas" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'porcos-bulas' and (select public.porcos_pode_editar()))
+  with check (bucket_id = 'porcos-bulas' and (select public.porcos_pode_editar()));
+
+drop policy if exists "Porcos: apagar bulas" on storage.objects;
+create policy "Porcos: apagar bulas" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'porcos-bulas' and (select public.porcos_pode_editar()));

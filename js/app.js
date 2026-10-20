@@ -75,6 +75,7 @@
   let papel = null;
   let db = emptyDb();
   let fotoUrl = {};
+  let bulaUrl = {};
   let loadedAt = 0;
   let offline = false;
   let current = { name: 'inicio', id: null };
@@ -659,9 +660,12 @@
 
     const prodHtml = `<ul class="list">${produtos.map((p) => `<li class="list-row${canEdit() ? ' clickable' : ''}"${canEdit() ? ` data-act="produto-edit" data-id="${p.id}"` : ''}>
         <span><strong>${esc(p.nome)}</strong><small>${p.intervalo_dias ? `Repetir a cada ${p.intervalo_dias} dias` : 'Uso esporádico'}</small></span>
-        <span class="right">${/^https?:\/\//i.test(p.bula || '')
-          ? `<a class="btn small ghost" href="${esc(p.bula)}" target="_blank" rel="noopener noreferrer" title="Abrir a bula de ${esc(p.nome)}">Ver bula</a>`
-          : '<small class="muted">sem bula</small>'}</span></li>`).join('')}</ul>
+        <span class="right">${(() => {
+          const b = bulaDe(p);
+          return b
+            ? `<a class="btn small ghost" href="${esc(b.url)}" target="_blank" rel="noopener noreferrer" title="Abrir a bula de ${esc(p.nome)}${b.arquivo ? ' (arquivo enviado)' : ''}">Ver bula</a>`
+            : '<small class="muted">sem bula</small>';
+        })()}</span></li>`).join('')}</ul>
       ${editBtn(`<button type="button" class="btn small" data-act="produto-new">${ICON.plus} Produto</button>`)}`;
 
     return `${pageHead('Saúde', 'Vacinas e remédios: calendário dos de uso recorrente e aplicações dos de uso esporádico',
@@ -1364,30 +1368,99 @@
     }
   }
 
+  const BULA_MAX = 20 * 1024 * 1024;
+  const BULA_TIPOS = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+  // Bula de um produto: { url, arquivo } (arquivo = true quando foi enviada como arquivo) ou null
+  function bulaDe(p) {
+    if (p.bula_arquivo && bulaUrl[p.bula_arquivo]) return { url: bulaUrl[p.bula_arquivo], arquivo: true };
+    if (/^https?:\/\//i.test(p.bula || '')) return { url: p.bula, arquivo: false };
+    return null;
+  }
+
   function formProduto(p) {
+    // Bula: um link ou um arquivo enviado (PDF ou foto). Guardar um apaga o outro.
+    let modo = p && p.bula_arquivo ? 'arquivo' : 'link';
     openForm({
       title: p ? p.nome : 'Novo produto',
       values: p || {},
       fields: [
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Verme' },
         { name: 'intervalo_dias', label: 'Repetir a cada', type: 'number', suffix: 'dias', hint: 'Em branco = uso esporádico, sem calendário (ex.: Ferro nos leitões)' },
-        { name: 'bula', label: 'Link da bula', placeholder: 'https://…', hint: 'Copie o endereço da página ou do PDF da bula e cole aqui. Em branco = sem bula.' },
       ],
       onSave: async (v) => {
         if (v.intervalo_dias != null && (!Number.isInteger(v.intervalo_dias) || v.intervalo_dias <= 0)) throw new Error('O intervalo precisa ser um número inteiro de dias.');
-        const bula = linkBula(v.bula);
-        if (bula == null) throw new Error('O link da bula não parece um endereço válido (ex.: https://site.com.br/bula.pdf).');
-        const row = { nome: v.nome, intervalo_dias: v.intervalo_dias, bula };
+        const row = { nome: v.nome, intervalo_dias: v.intervalo_dias };
+        const antigo = p && p.bula_arquivo;
+        let arquivo = null;
+        if (modo === 'link') {
+          const bula = linkBula($('[name="bula_link"]', form).value);
+          if (bula == null) throw new Error('O link da bula não parece um endereço válido (ex.: https://site.com.br/bula.pdf).');
+          Object.assign(row, { bula, bula_arquivo: null });
+        } else {
+          arquivo = $('[name="bula_file"]', form).files[0] || null;
+          if (arquivo && !BULA_TIPOS.includes(arquivo.type)) throw new Error('A bula precisa ser um PDF ou uma foto (JPG, PNG ou WEBP).');
+          if (arquivo && arquivo.size > BULA_MAX) throw new Error('O arquivo da bula passa de 20 MB.');
+          row.bula = '';
+          if (!arquivo && !antigo) row.bula_arquivo = null;
+        }
         if (!p) row.ordem = db.produtos.reduce((m, x) => Math.max(m, x.ordem), 0) + 1;
-        await save('produtos', p && p.id, row);
+        const salvo = await save('produtos', p && p.id, row);
+        if (arquivo) {
+          const ext = arquivo.type === 'application/pdf' ? 'pdf' : arquivo.type.split('/')[1].replace('jpeg', 'jpg');
+          const path = `${salvo.id}/${Date.now()}.${ext}`;
+          await Cloud.uploadBula(path, arquivo);
+          await save('produtos', salvo.id, { bula_arquivo: path });
+          Object.assign(bulaUrl, await Cloud.bulaUrls([path]));
+        }
+        // Arquivo antigo que deixou de ser usado
+        const atual = byId('produtos', salvo.id).bula_arquivo;
+        if (antigo && antigo !== atual) Cloud.removeBulas([antigo]).catch(() => {});
         return 'Produto salvo';
       },
       onDelete: p ? async () => {
         if (db.aplicacoes.some((x) => x.produto_id === p.id)) throw new Error('Este produto tem aplicações registradas: exclua-as antes.');
         await remove('produtos', p.id);
+        if (p.bula_arquivo) Cloud.removeBulas([p.bula_arquivo]).catch(() => {});
         return 'Produto excluído';
       } : null,
     });
+
+    const atual = p && p.bula_arquivo && bulaUrl[p.bula_arquivo];
+    $('[data-field="intervalo_dias"]', form).insertAdjacentHTML('afterend', `<div class="field bula-field">
+      <span>Bula</span>
+      <div class="seg" role="group" aria-label="Como guardar a bula">
+        <button type="button" data-bula-modo="link">Link</button>
+        <button type="button" data-bula-modo="arquivo">Arquivo</button>
+      </div>
+      <div data-bula="link">
+        <input name="bula_link" value="${esc((p && p.bula) || '')}" placeholder="https://…" autocomplete="off" aria-label="Link da bula">
+        <small class="hint">Copie o endereço da página ou do PDF da bula e cole aqui. Em branco = sem bula.</small>
+      </div>
+      <div data-bula="arquivo">
+        ${p && p.bula_arquivo ? `<p class="small">Arquivo atual: ${atual ? `<a href="${esc(atual)}" target="_blank" rel="noopener">abrir</a>` : 'guardado'}
+          · escolha outro abaixo para trocar.</p>` : ''}
+        <input type="file" name="bula_file" accept="application/pdf,image/jpeg,image/png,image/webp" aria-label="Arquivo da bula">
+        <small class="hint">PDF ou foto da bula, até 20 MB. Só quem tem acesso ao site consegue abrir.</small>
+      </div>
+      <small class="hint">Guardar um link apaga o arquivo, e guardar um arquivo apaga o link.</small>
+    </div>`);
+    const mostrarModo = () => {
+      $$('[data-bula-modo]', form).forEach((b) => {
+        b.classList.toggle('on', b.dataset.bulaModo === modo);
+        b.setAttribute('aria-pressed', String(b.dataset.bulaModo === modo));
+      });
+      $$('[data-bula]', form).forEach((d) => { d.hidden = d.dataset.bula !== modo; });
+    };
+    mostrarModo();
+    form.onclick = (e) => {
+      const b = e.target.closest('[data-bula-modo]');
+      if (b) {
+        modo = b.dataset.bulaModo;
+        mostrarModo();
+      }
+    };
+    dlg.addEventListener('close', () => { form.onclick = null; }, { once: true });
   }
 
   function formLancamento(l) {
@@ -1682,12 +1755,19 @@
     $('.fields', form).innerHTML = lista;
   });
 
+  // Endereços temporários das fotos e dos arquivos de bula (os buckets são privados)
   async function refreshFotos() {
     const paths = db.animais.map((a) => a.foto).filter(Boolean);
+    const bulas = db.produtos.map((p) => p.bula_arquivo).filter(Boolean);
     try {
       fotoUrl = await Cloud.fotoUrls(paths);
     } catch (err) {
       fotoUrl = {};
+    }
+    try {
+      bulaUrl = await Cloud.bulaUrls(bulas);
+    } catch (err) {
+      bulaUrl = {};
     }
   }
 
@@ -1897,6 +1977,7 @@
         loadedAt = c.at;
         offline = true;
         fotoUrl = {};
+        bulaUrl = {};
         showApp();
         onRoute();
       } else {

@@ -523,6 +523,13 @@ dialog::backdrop { background: rgba(30, 18, 10, 0.45); }
 .doses .btn { align-self: flex-start; }
 #dosesExtras { display: grid; gap: 8px; }
 #dosesExtras:empty { display: none; }
+.bula-field { gap: 8px; }
+.bula-field .seg { align-self: flex-start; }
+.bula-field [data-bula] { display: flex; flex-direction: column; gap: 5px; }
+.bula-field [data-bula][hidden] { display: none; }
+.bula-field input[type=file] { min-height: auto; padding: 8px; }
+.bula-field p { margin: 0; }
+
 .lote-lista { max-height: 50vh; overflow-y: auto; }
 .lote-lista .right { display: flex; align-items: center; gap: 8px; }
 .lote-status { min-width: 60px; font-size: 0.8rem; color: var(--muted); text-align: right; }
