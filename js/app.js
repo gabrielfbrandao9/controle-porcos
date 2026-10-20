@@ -471,6 +471,11 @@
           <h1>${esc(a.nome)}</h1>
           <p class="hero-badges"><span class="badge cat-${a.categoria}">${esc(CATEGORIAS[a.categoria])}</span>
             <span class="badge ${a.saida ? 'muted' : 'ok'}">${esc(statusAnimal(a))}</span></p>
+          ${(() => {
+            const g = a.gestacao_id && byId('gestacoes', a.gestacao_id);
+            return g ? `<p class="cria-de">Cria da <a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a>
+              · ${ordinal(numeroGestacao(g))} gestação, parto em ${esc(fmtDate(partoDe(g)))}</p>` : '';
+          })()}
           <dl class="info">${info.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
           ${a.obs ? `<p class="obs">${esc(a.obs)}</p>` : ''}
           ${editBtn(`<div class="hero-actions"><button type="button" class="btn" data-act="animal-edit" data-id="${a.id}">${ICON.edit} Editar</button>
@@ -529,6 +534,7 @@
     const parto = partoDe(g);
     const nascida = g.vivos != null;
     const aps = aplicacoesCria(g.id);
+    const filhos = sortAnimais(db.animais.filter((x) => x.gestacao_id === g.id));
     const linhas = [
       ['Cruzamento', fmtDate(g.cruzamento)],
       [nascida || g.parto ? 'Parto' : 'Parto previsto', fmtDate(parto)],
@@ -545,6 +551,7 @@
       <header><h3>${ordinal(n)} gestação</h3>${badgeGestacao(g)}</header>
       <dl class="kv">${linhas.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
       ${aps.length ? `<div class="dose-list">${aps.map((x) => doseChip(x, `${nomeProduto(x)} ${dose(numeroDose(x))} · ${fmtDate(x.data)}`)).join('')}</div>` : ''}
+      ${filhos.length ? `<p class="filhos"><span class="muted">Em Animais:</span> ${filhos.map((x) => `<a href="#/animal/${x.id}">${esc(x.nome)}</a>`).join(', ')}</p>` : ''}
       ${g.obs ? `<p class="obs">${esc(g.obs)}</p>` : ''}
       ${editBtn(`<footer><button type="button" class="btn small ghost" data-act="gestacao-edit" data-id="${g.id}">${ICON.edit} ${nascida ? 'Editar' : 'Registrar parto'}</button>
         <button type="button" class="btn small ghost" data-act="aplicacao-new" data-gestacao="${g.id}">${ICON.syringe} Aplicação</button></footer>`)}
@@ -1129,8 +1136,13 @@
 
   const animalOptions = (list, vazio) => [...(vazio ? [['', vazio]] : []), ...sortAnimais(list).map((a) => [a.id, a.nome])];
 
+  // "Matriz 1 · 2ª gestação · parto 29/04/2025"
+  const rotuloGestacao = (g) => `${nomeAnimal(g.matriz_id)} · ${ordinal(numeroGestacao(g))} gestação · parto ${fmtDate(partoDe(g))}`;
+
   function formAnimal(a) {
     const novo = !a;
+    // Gestações já nascidas, das mais recentes para as mais antigas (um animal não pode ser cria dele mesmo)
+    const gestacoes = sortByDate(db.gestacoes.filter((g) => g.vivos != null && (!a || g.matriz_id !== a.id)), 'parto', true);
     openForm({
       title: novo ? 'Novo animal' : `Editar ${a.nome}`,
       values: a ? { ...a, saida: a.saida || '' } : { categoria: 'porco', aquisicao: 'nascido', saida: '' },
@@ -1139,6 +1151,8 @@
         { name: 'categoria', label: 'Categoria', type: 'select', half: true, options: Object.entries(CATEGORIAS) },
         { name: 'aquisicao', label: 'Aquisição', type: 'select', half: true, options: Object.entries(AQUISICAO) },
         { name: 'nascimento', label: 'Nascimento', type: 'date', half: true },
+        { name: 'gestacao_id', label: 'Cria da gestação', type: 'select', hint: ' ',
+          options: [['', '— (não informado)'], ...gestacoes.map((g) => [g.id, rotuloGestacao(g)])] },
         { name: 'chegada', label: 'Chegada', type: 'date', half: true, showIf: (v) => v.aquisicao !== 'nascido' },
         { name: 'negociado_com', label: 'Negociado com', half: true, showIf: (v) => v.aquisicao !== 'nascido', placeholder: 'Pessoa' },
         { name: 'valor_compra', label: 'Valor de compra', type: 'money', half: true, showIf: (v) => v.aquisicao === 'comprado' },
@@ -1150,11 +1164,14 @@
       ],
       onSave: async (v) => {
         const nasc = v.aquisicao === 'nascido';
+        const mae = v.gestacao_id ? byId('gestacoes', v.gestacao_id) : null;
         const row = {
           nome: v.nome,
           categoria: v.categoria,
           aquisicao: v.aquisicao,
-          nascimento: v.nascimento,
+          // Sem data de nascimento, usa a do parto da gestação escolhida
+          nascimento: v.nascimento || (mae ? partoDe(mae) : null),
+          gestacao_id: mae ? mae.id : null,
           chegada: nasc ? null : v.chegada,
           negociado_com: nasc ? '' : v.negociado_com,
           valor_compra: v.aquisicao === 'comprado' ? v.valor_compra : null,
@@ -1180,6 +1197,27 @@
       } : null,
       deleteConfirm: a ? `Excluir ${a.nome}? As gestações e aplicações dele também são apagadas. Não dá para desfazer. (Para tirar do plantel, mude a Situação.)` : '',
     });
+
+    // Sugestão: gestação com parto no mesmo dia do nascimento digitado
+    const dica = $('[data-field="gestacao_id"] .hint', form);
+    const sugerir = () => {
+      const nasc = form.elements.nascimento.value;
+      const escolhida = form.elements.gestacao_id.value;
+      const iguais = nasc && !escolhida ? gestacoes.filter((g) => partoDe(g) === nasc) : [];
+      dica.innerHTML = iguais.length
+        ? `Parto no mesmo dia do nascimento: ${iguais.map((g) => `<button type="button" class="link-btn" data-usar-gestacao="${g.id}">${esc(rotuloGestacao(g))}</button>`).join(' ou ')}`
+        : (escolhida && !nasc ? 'Sem data de nascimento, fica a data do parto desta gestação.' : '');
+    };
+    sugerir();
+    form.oninput = sugerir;
+    form.onchange = sugerir;
+    form.onclick = (e) => {
+      const b = e.target.closest('[data-usar-gestacao]');
+      if (!b) return;
+      form.elements.gestacao_id.value = b.dataset.usarGestacao;
+      sugerir();
+    };
+    dlg.addEventListener('close', () => { form.oninput = null; form.onchange = null; form.onclick = null; }, { once: true });
   }
 
   function formGestacao(g, matrizId) {

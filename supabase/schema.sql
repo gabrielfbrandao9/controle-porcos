@@ -168,6 +168,10 @@ end;
 $$;
 create index if not exists porcos_gestacoes_matriz_idx on public.porcos_gestacoes (matriz_id);
 
+-- De qual gestação (cria de qual matriz) cada animal nasceu (vazio = não informado)
+alter table public.porcos_animais add column if not exists gestacao_id uuid references public.porcos_gestacoes (id) on delete set null;
+create index if not exists porcos_animais_gestacao_idx on public.porcos_animais (gestacao_id);
+
 -- Remédios e vacinas (Ferro, Verme, Suiven, Megabov, Isocox...)
 create table if not exists public.porcos_produtos (
   id uuid primary key default gen_random_uuid(),
