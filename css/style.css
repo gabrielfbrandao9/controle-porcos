@@ -306,12 +306,13 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .foto.cat-barrao { background: var(--c-barrao-bg); color: var(--c-barrao); }
 .foto.cat-porca { background: var(--c-porca-bg); color: var(--c-porca); }
 .foto.cat-porco { background: var(--c-porco-bg); color: var(--c-porco); }
-.foto.large { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 12px 12px 0 0; }
-.foto.large.empty svg { width: 34%; height: 34%; }
-.foto.xl { width: 100%; height: auto; aspect-ratio: 1; border-radius: 14px; }
-.foto.xl.empty svg { width: 40%; height: 40%; }
+/* Fotos grandes em 16:9 (o formato das fotos do celular deitado) */
+.foto.large { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 12px 12px 0 0; }
+.foto.large.empty svg { width: 26%; height: 26%; }
+.foto.xl { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 14px; }
+.foto.xl.empty svg { width: 24%; height: 24%; }
 
-.animal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.animal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
 @media (max-width: 480px) { .animal-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; } }
 .animal-card {
   display: flex; flex-direction: column; overflow: hidden;
@@ -330,8 +331,9 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .mini strong { display: block; }
 .mini small { color: var(--muted); font-size: 0.8rem; }
 
-.hero { display: grid; grid-template-columns: 260px 1fr; gap: 24px; }
-@media (max-width: 680px) { .hero { grid-template-columns: 1fr; gap: 16px; } .hero-photo { max-width: 220px; } .info { grid-template-columns: 1fr 1fr; } }
+.hero { display: grid; grid-template-columns: minmax(0, 420px) 1fr; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; gap: 16px; } .hero-photo { max-width: 560px; } }
+@media (max-width: 680px) { .hero .info, .section .info { grid-template-columns: 1fr 1fr; } }
 .hero-photo { position: relative; }
 .photo-btn { position: absolute; left: 10px; bottom: 10px; box-shadow: var(--shadow); }
 .hero-main h1 { font-size: 2rem; }
