@@ -514,6 +514,10 @@ dialog::backdrop { background: rgba(30, 18, 10, 0.45); }
 .doses .btn { align-self: flex-start; }
 #dosesExtras { display: grid; gap: 8px; }
 #dosesExtras:empty { display: none; }
+.lote-lista { max-height: 50vh; overflow-y: auto; }
+.lote-lista .right { display: flex; align-items: center; gap: 8px; }
+.lote-status { min-width: 60px; font-size: 0.8rem; color: var(--muted); text-align: right; }
+
 .ja-aplicadas { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); }
 .ja-aplicadas p { margin: 0; }
 .checks .check { align-items: flex-start; padding: 4px 0; }

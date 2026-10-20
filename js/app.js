@@ -404,7 +404,8 @@
           </span></a>`).join('')}</div>`
       : '<div class="empty-box"><p>Nenhum animal aqui.</p></div>';
 
-    return `${pageHead('Animais', 'Todos os animais que já passaram pelo plantel', editBtn(`<button type="button" class="btn primary" data-act="animal-new">${ICON.plus} Animal</button>`))}
+    return `${pageHead('Animais', 'Todos os animais que já passaram pelo plantel', editBtn(`<button type="button" class="btn" data-act="fotos-lote" title="Enviar várias fotos: cada arquivo vai para o animal com o mesmo nome">${ICON.camera} Fotos em lote</button>
+      <button type="button" class="btn primary" data-act="animal-new">${ICON.plus} Animal</button>`))}
       <div class="chips">${chip('plantel', 'No plantel')}${chip('venda', SAIDA_FILTRO.venda)}${chip('abate', SAIDA_FILTRO.abate)}${chip('morte', SAIDA_FILTRO.morte)}${chip('todos', 'Todos')}</div>
       ${cards}`;
   }
@@ -1585,6 +1586,17 @@
     });
   }
 
+  // Reduz a foto, envia e troca a foto do animal (apaga a antiga)
+  async function enviarFoto(a, file) {
+    const blob = await resizeImage(file);
+    const path = `animais/${a.id}/${Date.now()}.jpg`;
+    await Cloud.uploadFoto(path, blob);
+    const antiga = animal(a.id).foto;
+    await save('animais', a.id, { foto: path });
+    Object.assign(fotoUrl, await Cloud.fotoUrls([path]));
+    if (antiga) Cloud.removeFotos([antiga]).catch(() => {});
+  }
+
   $('#fotoInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
@@ -1592,18 +1604,53 @@
     if (!file || !a) return;
     toast('Enviando foto…', 20000);
     try {
-      const blob = await resizeImage(file);
-      const path = `animais/${a.id}/${Date.now()}.jpg`;
-      await Cloud.uploadFoto(path, blob);
-      const antiga = a.foto;
-      await save('animais', a.id, { foto: path });
-      Object.assign(fotoUrl, await Cloud.fotoUrls([path]));
-      if (antiga) Cloud.removeFotos([antiga]).catch(() => {});
+      await enviarFoto(a, file);
       render();
       toast('Foto salva');
     } catch (err) {
       toast(errMsg(err), 6000);
     }
+  });
+
+  // Fotos em lote: cada arquivo vai para o animal com o mesmo nome ("Matriz 1.jpg" -> Matriz 1)
+  const normalizar = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  $('#fotosLote').addEventListener('change', (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    const porNome = new Map(db.animais.map((a) => [normalizar(a.nome), a]));
+    const itens = files.map((f) => ({ file: f, animal: porNome.get(normalizar(f.name.replace(/\.[^.]+$/, ''))) || null }))
+      .sort((x, y) => (x.animal ? x.animal.ordem : 1e9) - (y.animal ? y.animal.ordem : 1e9));
+    const ok = itens.filter((x) => x.animal);
+    const repetidos = new Set(ok.map((x) => x.animal.id)).size !== ok.length;
+    const lista = `<ul class="list lote-lista">${itens.map((x) => `<li class="list-row"><span><strong>${esc(x.file.name)}</strong>
+        <small>${x.animal ? `${esc(x.animal.nome)}${x.animal.foto ? ' · substitui a foto atual' : ''}` : 'nenhum animal com esse nome: fica de fora'}</small></span>
+        <span class="right">${x.animal ? fotoHtml(x.animal) : ''}<span class="lote-status" data-arquivo="${esc(x.file.name)}"></span></span></li>`).join('')}</ul>`;
+    openForm({
+      title: 'Fotos em lote',
+      intro: `Cada foto vai para o animal com o mesmo nome do arquivo (ex.: <strong>Matriz 1.jpg</strong> vai para a Matriz 1).
+        ${repetidos ? '<br><strong>Há mais de um arquivo para o mesmo animal: vale o último.</strong>' : ''}`,
+      fields: [],
+      submitLabel: ok.length ? `Enviar ${plural(ok.length, 'foto', 'fotos')}` : 'Fechar',
+      onSave: async () => {
+        let n = 0;
+        for (const x of ok) {
+          const st = $(`.lote-status[data-arquivo="${CSS.escape(x.file.name)}"]`, form);
+          if (st) st.textContent = 'enviando…';
+          try {
+            await enviarFoto(x.animal, x.file);
+            n++;
+            if (st) st.textContent = 'ok';
+          } catch (err) {
+            if (st) st.textContent = 'erro';
+            throw new Error(`${n} de ${ok.length} enviadas. Parou em ${x.file.name}: ${errMsg(err)}`);
+          }
+        }
+        return ok.length ? `${plural(n, 'foto enviada', 'fotos enviadas')}` : '';
+      },
+    });
+    $('.fields', form).innerHTML = lista;
   });
 
   async function refreshFotos() {
@@ -1641,6 +1688,7 @@
     bloco: (el) => toggleBloco(el),
     'saude-animais': (el) => setSaude('animais', el.dataset.value),
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
+    'fotos-lote': () => $('#fotosLote').click(),
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
     reload: () => reload(),
