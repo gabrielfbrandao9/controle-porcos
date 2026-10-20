@@ -52,6 +52,7 @@
     pig: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="13" rx="7.5" ry="6.5"/><path d="M6.5 8.2 5 4.5l4 2M17.5 8.2 19 4.5l-4 2"/><ellipse cx="12" cy="15" rx="3" ry="2"/></svg>',
     ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
     chevron: '<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+    download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5"/><path d="M5 19.5h14"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
     google: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>',
   };
@@ -455,6 +456,19 @@
       </section>`;
     }
 
+    // Barrão: as gestações em que ele foi o pai
+    const comoPai = sortByDate(db.gestacoes.filter((g) => g.barrao_id === a.id), 'cruzamento');
+    if (a.categoria === 'barrao' || comoPai.length) {
+      gestHtml += `<section class="section card"><h2>Crias como pai</h2>
+        ${comoPai.length ? `<ul class="list">${comoPai.map((g) => `<li class="list-row">
+            <span><strong><a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a> · ${ordinal(numeroGestacao(g))} gestação</strong>
+              <small>Cruzamento ${esc(fmtDate(g.cruzamento))} · parto ${esc(fmtDate(partoDe(g)))}</small></span>
+            <span class="right">${g.vivos != null ? `<strong>${plural(nascidosDe(g), 'nascido', 'nascidos')}</strong><small>${plural(g.vivos, 'vivo', 'vivos')} · ${plural(g.mortos || 0, 'morto', 'mortos')}</small>` : badgeGestacao(g)}</span>
+          </li>`).join('')}</ul>`
+          : '<p class="muted">Nenhuma gestação com este barrão. Para marcar, edite a gestação em Crias e escolha o barrão.</p>'}
+      </section>`;
+    }
+
     const abate = db.abates.find((x) => x.animal_id === a.id);
     const abateHtml = abate ? bloco('animal-abate', 'Abate', `
         <dl class="info"><div><dt>Data</dt><dd>${esc(fmtDate(abate.data))}</dd></div>
@@ -473,7 +487,8 @@
             <span class="badge ${a.saida ? 'muted' : 'ok'}">${esc(statusAnimal(a))}</span></p>
           ${(() => {
             const g = a.gestacao_id && byId('gestacoes', a.gestacao_id);
-            return g ? `<p class="cria-de">Cria da <a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a>
+            return g ? `<p class="cria-de">Cria da <a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a>${g.barrao_id
+                ? ` e do <a href="#/animal/${g.barrao_id}">${esc(nomeAnimal(g.barrao_id))}</a>` : ''}
               · ${ordinal(numeroGestacao(g))} gestação, parto em ${esc(fmtDate(partoDe(g)))}</p>` : '';
           })()}
           <dl class="info">${info.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
@@ -536,6 +551,7 @@
     const aps = aplicacoesCria(g.id);
     const filhos = sortAnimais(db.animais.filter((x) => x.gestacao_id === g.id));
     const linhas = [
+      ['Barrão (pai)', g.barrao_id ? nomeAnimal(g.barrao_id) : '—'],
       ['Cruzamento', fmtDate(g.cruzamento)],
       [nascida || g.parto ? 'Parto' : 'Parto previsto', fmtDate(parto)],
     ];
@@ -912,10 +928,18 @@
         </section>
         <section class="section card"><h2>Dados</h2>
           <p class="muted">${quando ? `Carregados às ${esc(quando)}. ` : ''}O site busca as novidades sozinho ao voltar para ele.</p>
-          <button type="button" class="btn" data-act="reload">${ICON.refresh} Atualizar agora</button>
-          <button type="button" class="btn ghost" data-act="install" ${installPrompt ? '' : 'hidden'}>Instalar app</button>
+          <div class="btn-row">
+            <button type="button" class="btn" data-act="reload">${ICON.refresh} Atualizar agora</button>
+            <button type="button" class="btn ghost" data-act="install" ${installPrompt ? '' : 'hidden'}>Instalar app</button>
+          </div>
         </section>
-      </div>`;
+      </div>
+      <section class="section card"><h2>Cópia de segurança</h2>
+        <p class="muted">Baixa todos os dados numa planilha do Excel, com uma aba para cada parte do site
+          (animais, gestações, aplicações, abates, lançamentos, resumo por mês, ração e vacinas).
+          Guarde de vez em quando no computador ou no Google Drive. Fotos e arquivos de bula não vão na planilha.</p>
+        <button type="button" class="btn primary" data-act="exportar">${ICON.download} Baixar tudo em Excel</button>
+      </section>`;
   }
 
   function siteUrl() {
@@ -1136,6 +1160,27 @@
 
   const animalOptions = (list, vazio) => [...(vazio ? [['', vazio]] : []), ...sortAnimais(list).map((a) => [a.id, a.nome])];
 
+  // Mãe, pai e gestação de onde o animal nasceu (o que estiver informado)
+  function paisDe(a) {
+    const g = a && a.gestacao_id ? byId('gestacoes', a.gestacao_id) : null;
+    return { gestacao: g, mae: g ? g.matriz_id : null, pai: g ? g.barrao_id || null : null };
+  }
+
+  // Parentesco próximo entre a matriz e o barrão de um cruzamento (texto) ou null
+  function parentesco(matriz, barrao) {
+    if (!matriz || !barrao) return null;
+    const pm = paisDe(matriz);
+    const pb = paisDe(barrao);
+    if (pm.pai === barrao.id) return `o ${barrao.nome} é pai da ${matriz.nome}`;
+    if (pb.mae === matriz.id) return `o ${barrao.nome} é filho da ${matriz.nome}`;
+    if (pm.gestacao && pm.gestacao === pb.gestacao) return `${barrao.nome} e ${matriz.nome} são irmãos da mesma ninhada`;
+    if (pm.mae && pm.mae === pb.mae) return `${barrao.nome} e ${matriz.nome} são filhos da mesma mãe (${nomeAnimal(pm.mae)})`;
+    if (pm.pai && pm.pai === pb.pai) return `${barrao.nome} e ${matriz.nome} são filhos do mesmo pai (${nomeAnimal(pm.pai)})`;
+    if (pm.mae && paisDe(animal(pm.mae)).pai === barrao.id) return `o ${barrao.nome} é avô da ${matriz.nome}`;
+    if (pb.mae && paisDe(animal(pb.mae)).mae === matriz.id) return `a ${matriz.nome} é avó do ${barrao.nome}`;
+    return null;
+  }
+
   // "Matriz 1 · 2ª gestação · parto 29/04/2025"
   const rotuloGestacao = (g) => `${nomeAnimal(g.matriz_id)} · ${ordinal(numeroGestacao(g))} gestação · parto ${fmtDate(partoDe(g))}`;
 
@@ -1223,12 +1268,17 @@
   function formGestacao(g, matrizId) {
     const novo = !g;
     const matrizes = db.animais.filter((x) => x.categoria === 'matriz' && (noPlantel(x) || (g && x.id === g.matriz_id)));
+    // Todos os barrões (o pai de uma gestação antiga pode já ter saído do plantel): primeiro os do plantel
+    const barroes = sortAnimais(db.animais.filter((x) => x.categoria === 'barrao'))
+      .sort((x, y) => Number(!noPlantel(x)) - Number(!noPlantel(y)))
+      .map((x) => [x.id, noPlantel(x) ? x.nome : `${x.nome} (${statusAnimal(x).toLowerCase()} em ${fmtDate(x.saida_data)})`]);
     openForm({
       title: novo ? 'Nova gestação' : 'Gestação',
       intro: `Enquanto o dia do parto ficar em branco, a previsão é o cruzamento + ${GESTACAO_DIAS} dias (e acompanha se mudar o cruzamento).`,
       values: g || { matriz_id: matrizId || (matrizes[0] && matrizes[0].id), cruzamento: hoje() },
       fields: [
-        { name: 'matriz_id', label: 'Matriz', type: 'select', required: true, options: animalOptions(matrizes) },
+        { name: 'matriz_id', label: 'Matriz', type: 'select', half: true, required: true, options: animalOptions(matrizes) },
+        { name: 'barrao_id', label: 'Barrão (pai)', type: 'select', half: true, options: [['', '— (não informado)'], ...barroes] },
         { name: 'cruzamento', label: 'Cruzamento', type: 'date', half: true, required: true },
         { name: 'parto', label: 'Parto', type: 'date', half: true, hint: ' ' },
         { name: 'vivos', label: 'Vivos', type: 'number', half: true, hint: 'Em branco = ainda não nasceu' },
@@ -1246,6 +1296,7 @@
         if (v.vivos == null && v.mortos != null) throw new Error('Preencha os vivos (pode ser 0) para registrar o parto.');
         const row = {
           matriz_id: v.matriz_id,
+          barrao_id: v.barrao_id || null,
           cruzamento: v.cruzamento,
           // Sem data: fica a previsão (cruzamento + 114). Depois do parto registrado, a data fica fixa.
           parto: v.parto || (v.vivos != null ? addDays(v.cruzamento, GESTACAO_DIAS) : null),
@@ -1277,7 +1328,13 @@
       $('[data-field="mortos"] .hint', form).textContent = vivos != null && ok(vivos) && ok(mortos)
         ? `Nascidos: ${vivos + (mortos || 0)}`
         : '';
+      // Aviso de cruzamento entre parentes
+      const rel = parentesco(animal(form.elements.matriz_id.value), animal(form.elements.barrao_id.value));
+      const aviso = $('#avisoParentesco', form);
+      aviso.textContent = rel ? `Atenção: ${rel}.` : '';
+      aviso.hidden = !rel;
     };
+    $('[data-field="barrao_id"]', form).insertAdjacentHTML('afterend', '<p class="aviso-parentesco" id="avisoParentesco" hidden></p>');
     dicas();
     form.oninput = dicas;
     form.onchange = dicas;
@@ -1809,6 +1866,179 @@
     }
   }
 
+  // ---------- Cópia de segurança em Excel ----------
+  // A biblioteca (SheetJS) só é baixada quando alguém exporta.
+
+  const XLSX_URL = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  let xlsxPronto = null;
+
+  function carregarXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!xlsxPronto) {
+      xlsxPronto = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = XLSX_URL;
+        s.onload = () => resolve(window.XLSX);
+        s.onerror = () => {
+          xlsxPronto = null;
+          reject(new Error('não foi possível baixar o gerador de planilhas (sem internet?)'));
+        };
+        document.head.appendChild(s);
+      });
+    }
+    return xlsxPronto;
+  }
+
+  // Data "AAAA-MM-DD" -> número de série do Excel (dias desde 30/12/1899), sem depender do fuso horário.
+  // As colunas de data recebem o formato dd/mm/aaaa em exportarExcel.
+  const COLUNAS_DATA = new Set(['Data', 'Nascimento', 'Chegada', 'Data da saída', 'Cruzamento', 'Parto', 'Capação']);
+  function xDate(s) {
+    if (!s) return null;
+    const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
+    return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000;
+  }
+  const xNum = (v) => (v == null || v === '' ? null : Number(v));
+
+  // Monta as abas: { nome, linhas: [{ coluna: valor }], dinheiro: [colunas], datas: [colunas] }
+  function abasExcel() {
+    const animalNome = (id) => (id ? nomeAnimal(id) : '');
+    const animais = sortAnimais(db.animais).map((a) => {
+      const g = a.gestacao_id && byId('gestacoes', a.gestacao_id);
+      return {
+        Nome: a.nome,
+        Categoria: CATEGORIAS[a.categoria],
+        Situação: statusAnimal(a),
+        Nascimento: xDate(a.nascimento),
+        Idade: a.nascimento ? idadeAnimal(a) : '',
+        Aquisição: AQUISICAO[a.aquisicao],
+        Chegada: xDate(a.chegada),
+        'Negociado com': a.negociado_com || '',
+        'Valor de compra': xNum(a.valor_compra),
+        'Data da saída': xDate(a.saida_data),
+        'Valor da venda': xNum(a.valor_venda),
+        Mãe: g ? animalNome(g.matriz_id) : '',
+        Pai: g ? animalNome(g.barrao_id) : '',
+        'Cria da gestação': g ? `${ordinal(numeroGestacao(g))} gestação` : '',
+        Observações: a.obs || '',
+      };
+    });
+    const gestacoes = [...db.gestacoes].sort((a, b) => nomeAnimal(a.matriz_id).localeCompare(nomeAnimal(b.matriz_id), 'pt-BR') || a.cruzamento.localeCompare(b.cruzamento))
+      .map((g) => ({
+        Matriz: animalNome(g.matriz_id),
+        Gestação: ordinal(numeroGestacao(g)),
+        'Barrão (pai)': animalNome(g.barrao_id),
+        Cruzamento: xDate(g.cruzamento),
+        Parto: xDate(partoDe(g)),
+        Situação: { nascida: 'Nascida', prevista: 'Prevista', pendente: 'Falta registrar o parto' }[situacaoGestacao(g)],
+        'Duração (dias)': g.vivos != null ? diffDays(g.cruzamento, partoDe(g)) : null,
+        Nascidos: nascidosDe(g),
+        Vivos: g.vivos,
+        Mortos: g.mortos,
+        Machos: g.machos,
+        Fêmeas: g.femeas,
+        Capação: xDate(g.capacao),
+        Observações: g.obs || '',
+      }));
+    const aplicacoes = sortByDate(db.aplicacoes).map((x) => ({
+      Data: xDate(x.data),
+      Produto: nomeProduto(x),
+      Dose: dose(numeroDose(x)),
+      Em: alvoAplicacao(x),
+      Observações: x.obs || '',
+    }));
+    const produtos = produtosOrdenados().map((p) => ({
+      Nome: p.nome,
+      Uso: p.intervalo_dias ? 'Recorrente' : 'Esporádico',
+      'Repetir a cada (dias)': p.intervalo_dias,
+      Bula: p.bula_arquivo ? 'Arquivo enviado (abrir pelo site)' : (p.bula || ''),
+    }));
+    const partes = colunasPartes(db.abates);
+    const abates = sortByDate(db.abates).map((ab) => {
+      const row = { Data: xDate(ab.data), Animal: animalNome(ab.animal_id) };
+      partes.forEach((c) => {
+        const list = partesAbate(ab).filter((i) => i.parte.trim().toLowerCase() === c.key);
+        row[`${c.nome} (kg)`] = list.some((i) => i.kg != null) ? list.reduce((s, i) => s + Number(i.kg || 0), 0) : null;
+        row[`${c.nome} (R$)`] = list.some((i) => i.valor != null) ? list.reduce((s, i) => s + Number(i.valor || 0), 0) : null;
+      });
+      row['Peso total (kg)'] = partesAbate(ab).length ? pesoAbate(ab) : null;
+      row['Valor total'] = xNum(ab.valor);
+      row.Observações = ab.obs || '';
+      return row;
+    });
+    const lancamentos = sortByDate(db.lancamentos).map((l) => ({
+      Data: xDate(l.data),
+      Tipo: l.tipo === 'receita' ? 'Receita' : 'Despesa',
+      Categoria: LANCAMENTOS[l.categoria].label,
+      Descrição: l.descricao || '',
+      Valor: Number(l.valor),
+    }));
+    const meses = new Map();
+    db.lancamentos.forEach((l) => {
+      const k = l.data.slice(0, 7);
+      if (!meses.has(k)) meses.set(k, []);
+      meses.get(k).push(l);
+    });
+    const porMes = [...meses.keys()].sort().map((k) => {
+      const t = totaisFinancas(meses.get(k));
+      return { Mês: fmtMonth(k), Soro: t.soro, Ração: t.racao, Outras: t.outras, Receitas: t.receitas, Saldo: t.saldo };
+    });
+    const nomesIng = ingredientesRacao();
+    const racao = racoesOrdenadas().map((r) => {
+      const row = { Fase: r.fase, Idade: r.faixa || '' };
+      nomesIng.forEach((n) => {
+        const i = (r.itens || []).find((x) => x.nome === n);
+        row[`${n} (%)`] = i ? Number(i.pct) : 0;
+      });
+      row['Soma (%)'] = (r.itens || []).reduce((s, i) => s + Number(i.pct || 0), 0);
+      return row;
+    });
+    const dinheiroAbates = Object.keys(abates[0] || {}).filter((k) => k.endsWith('(R$)') || k === 'Valor total');
+    return [
+      { nome: 'Animais', linhas: animais, dinheiro: ['Valor de compra', 'Valor da venda'] },
+      { nome: 'Gestações', linhas: gestacoes },
+      { nome: 'Aplicações', linhas: aplicacoes },
+      { nome: 'Vacinas e remédios', linhas: produtos },
+      { nome: 'Abates', linhas: abates, dinheiro: dinheiroAbates },
+      { nome: 'Lançamentos', linhas: lancamentos, dinheiro: ['Valor'] },
+      { nome: 'Por mês', linhas: porMes, dinheiro: ['Soro', 'Ração', 'Outras', 'Receitas', 'Saldo'] },
+      { nome: 'Ração', linhas: racao },
+    ];
+  }
+
+  async function exportarExcel(btn) {
+    btn.disabled = true;
+    toast('Preparando a planilha…', 20000);
+    try {
+      const XLSX = await carregarXlsx();
+      const wb = XLSX.utils.book_new();
+      for (const aba of abasExcel()) {
+        const ws = aba.linhas.length
+          ? XLSX.utils.json_to_sheet(aba.linhas)
+          : XLSX.utils.aoa_to_sheet([['Nenhum registro']]);
+        const cols = aba.linhas.length ? Object.keys(aba.linhas[0]) : [];
+        // Formato de data e de dinheiro, e largura das colunas
+        cols.forEach((c, j) => {
+          const z = COLUNAS_DATA.has(c) ? 'dd/mm/yyyy' : ((aba.dinheiro || []).includes(c) ? '"R$" #,##0.00' : null);
+          if (!z) return;
+          for (let i = 1; i <= aba.linhas.length; i++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: i, c: j })];
+            if (cell && typeof cell.v === 'number') cell.z = z;
+          }
+        });
+        ws['!cols'] = cols.map((c) => ({
+          wch: Math.min(40, Math.max(c.length, ...aba.linhas.map((l) => (COLUNAS_DATA.has(c) ? 10 : String(l[c] ?? '').length))) + 2),
+        }));
+        XLSX.utils.book_append_sheet(wb, ws, aba.nome);
+      }
+      XLSX.writeFile(wb, `controle-porcos-${hoje()}.xlsx`);
+      toast('Planilha baixada');
+    } catch (err) {
+      toast(`Não foi possível gerar a planilha: ${err.message}`, 6000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   // ---------- Ações ----------
 
   const ACTIONS = {
@@ -1836,6 +2066,7 @@
     'saude-animais': (el) => setSaude('animais', el.dataset.value),
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
     'fotos-lote': () => $('#fotosLote').click(),
+    exportar: (el) => exportarExcel(el),
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
     reload: () => reload(),
