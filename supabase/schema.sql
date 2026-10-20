@@ -174,11 +174,15 @@ create table if not exists public.porcos_produtos (
   nome text not null unique,
   -- de quantos em quantos dias repetir (null = não tem reforço no calendário)
   intervalo_dias int check (intervalo_dias > 0),
+  -- link da bula (vazio = sem bula)
+  bula text not null default '' check (bula = '' or (bula ~* '^https?://' and length(bula) <= 2000)),
   ordem int not null default 0,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now(),
   atualizado_por uuid default auth.uid() references auth.users (id) on delete set null
 );
+-- Para quem criou a tabela antes do link da bula
+alter table public.porcos_produtos add column if not exists bula text not null default '';
 
 -- Cada aplicação: num animal OU numa cria (leitegada)
 create table if not exists public.porcos_aplicacoes (

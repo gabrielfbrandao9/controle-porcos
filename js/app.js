@@ -658,8 +658,10 @@
       : nenhuma;
 
     const prodHtml = `<ul class="list">${produtos.map((p) => `<li class="list-row${canEdit() ? ' clickable' : ''}"${canEdit() ? ` data-act="produto-edit" data-id="${p.id}"` : ''}>
-        <span><strong>${esc(p.nome)}</strong></span>
-        <span class="right"><small>${p.intervalo_dias ? `Repetir a cada ${p.intervalo_dias} dias` : 'Uso esporádico'}</small></span></li>`).join('')}</ul>
+        <span><strong>${esc(p.nome)}</strong><small>${p.intervalo_dias ? `Repetir a cada ${p.intervalo_dias} dias` : 'Uso esporádico'}</small></span>
+        <span class="right">${/^https?:\/\//i.test(p.bula || '')
+          ? `<a class="btn small ghost" href="${esc(p.bula)}" target="_blank" rel="noopener noreferrer" title="Abrir a bula de ${esc(p.nome)}">Ver bula</a>`
+          : '<small class="muted">sem bula</small>'}</span></li>`).join('')}</ul>
       ${editBtn(`<button type="button" class="btn small" data-act="produto-new">${ICON.plus} Produto</button>`)}`;
 
     return `${pageHead('Saúde', 'Vacinas e remédios: calendário dos de uso recorrente e aplicações dos de uso esporádico',
@@ -1349,6 +1351,19 @@
     dlg.addEventListener('close', () => { form.onclick = null; form.onchange = null; }, { once: true });
   }
 
+  // Link da bula: '' se vazio, null se inválido. Sem "http" na frente, completa com https://
+  function linkBula(s) {
+    let t = String(s || '').trim();
+    if (!t) return '';
+    if (!/^https?:\/\//i.test(t)) t = `https://${t}`;
+    try {
+      const u = new URL(t);
+      return /^https?:$/.test(u.protocol) && u.hostname.includes('.') && t.length <= 2000 ? u.href : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   function formProduto(p) {
     openForm({
       title: p ? p.nome : 'Novo produto',
@@ -1356,10 +1371,13 @@
       fields: [
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Verme' },
         { name: 'intervalo_dias', label: 'Repetir a cada', type: 'number', suffix: 'dias', hint: 'Em branco = uso esporádico, sem calendário (ex.: Ferro nos leitões)' },
+        { name: 'bula', label: 'Link da bula', placeholder: 'https://…', hint: 'Copie o endereço da página ou do PDF da bula e cole aqui. Em branco = sem bula.' },
       ],
       onSave: async (v) => {
         if (v.intervalo_dias != null && (!Number.isInteger(v.intervalo_dias) || v.intervalo_dias <= 0)) throw new Error('O intervalo precisa ser um número inteiro de dias.');
-        const row = { nome: v.nome, intervalo_dias: v.intervalo_dias };
+        const bula = linkBula(v.bula);
+        if (bula == null) throw new Error('O link da bula não parece um endereço válido (ex.: https://site.com.br/bula.pdf).');
+        const row = { nome: v.nome, intervalo_dias: v.intervalo_dias, bula };
         if (!p) row.ordem = db.produtos.reduce((m, x) => Math.max(m, x.ordem), 0) + 1;
         await save('produtos', p && p.id, row);
         return 'Produto salvo';
