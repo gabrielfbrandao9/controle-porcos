@@ -511,6 +511,12 @@ dialog::backdrop { background: rgba(30, 18, 10, 0.45); }
 .bloco.fechado .bloco-toggle .chevron { transform: rotate(-90deg); }
 .bloco.fechado > .bloco-head { margin-bottom: 0; }
 .sub-bloco { margin-top: 18px; }
+
+/* Matrizes em Crias: seta para minimizar ao lado do nome */
+.matriz-titulo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.matriz-titulo .bloco-toggle { width: 36px; height: 36px; margin: 0 0 0 -8px; padding: 0; justify-content: center; }
+.matriz-titulo .badge { margin-left: 4px; }
+.matriz-bloco.fechado { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .sub-bloco .bloco-head { margin-bottom: 8px; }
 
 .doses { gap: 8px; margin-top: -4px; }

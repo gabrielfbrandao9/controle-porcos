@@ -498,13 +498,24 @@
       const vivos = gs.reduce((s, g) => s + (g.vivos || 0), 0);
       const mortos = gs.reduce((s, g) => s + (g.mortos || 0), 0);
       const cards = [...gs].reverse().map((g) => criaCard(g, gs.indexOf(g) + 1)).join('');
-      return `<section class="section">
-        <div class="section-head">
-          <a class="matriz-head" href="#/animal/${m.id}">${fotoHtml(m)}<span><strong>${esc(m.nome)}</strong>
-            <small>${plural(gs.length, 'gestação', 'gestações')} · ${plural(nasc, 'nascido', 'nascidos')} (${plural(vivos, 'vivo', 'vivos')}, ${plural(mortos, 'morto', 'mortos')})${m.saida ? ` · ${esc(statusAnimal(m).toLowerCase())}` : ''}</small></span></a>
+      // Gestação ainda sem parto registrado: aparece no cabeçalho, mesmo com a matriz minimizada
+      const andamento = gs.find((g) => situacaoGestacao(g) !== 'nascida');
+      const key = `crias-${m.id}`;
+      const fechado = fechadas.has(key);
+      return `<section class="section bloco matriz-bloco${fechado ? ' fechado' : ''}" data-bloco="${key}">
+        <div class="section-head bloco-head">
+          <div class="matriz-titulo">
+            <button type="button" class="icon bloco-toggle" data-act="bloco" data-key="${key}" aria-expanded="${!fechado}"
+              aria-label="Minimizar ou mostrar as gestações da ${esc(m.nome)}" title="${fechado ? 'Mostrar' : 'Minimizar'}">${ICON.chevron}</button>
+            <a class="matriz-head" href="#/animal/${m.id}">${fotoHtml(m)}<span><strong>${esc(m.nome)}</strong>
+              <small>${plural(gs.length, 'gestação', 'gestações')} · ${plural(nasc, 'nascido', 'nascidos')} (${plural(vivos, 'vivo', 'vivos')}, ${plural(mortos, 'morto', 'mortos')})${m.saida ? ` · ${esc(statusAnimal(m).toLowerCase())}` : ''}</small></span></a>
+            ${andamento ? badgeGestacao(andamento) : ''}
+          </div>
           ${editBtn(m.saida ? '' : `<button type="button" class="btn small" data-act="gestacao-new" data-matriz="${m.id}">${ICON.plus} Gestação</button>`)}
         </div>
-        ${gs.length ? `<div class="cria-grid">${cards}</div>` : '<p class="muted">Nenhuma gestação registrada.</p>'}
+        <div class="bloco-body"${fechado ? ' hidden' : ''}>
+          ${gs.length ? `<div class="cria-grid">${cards}</div>` : '<p class="muted">Nenhuma gestação registrada.</p>'}
+        </div>
       </section>`;
     }).join('');
 
