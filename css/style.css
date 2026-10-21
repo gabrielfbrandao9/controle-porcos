@@ -530,6 +530,9 @@ dialog::backdrop { background: rgba(30, 18, 10, 0.45); }
 .copia-opcoes { margin: 0 0 14px; padding-left: 20px; color: var(--muted); font-size: 0.92rem; }
 .copia-opcoes li { margin-bottom: 4px; }
 .copia-opcoes strong { color: var(--ink); }
+.restaurar { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.restaurar h3 { margin-bottom: 6px; }
+.restaurar-btn { border-color: var(--danger); }
 
 .aviso-parentesco { margin: -4px 0 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); font-size: 0.88rem; font-weight: 600; }
 .list-row strong a { color: inherit; }

@@ -18,7 +18,9 @@ quem decide é o dono, na tela **Conta**. Veja [SUPABASE.md](SUPABASE.md).
   Enquanto o dia do parto não for preenchido, ele fica previsto para 114 dias depois do cruzamento; depois do
   parto, registre vivos e mortos (o site mostra os nascidos, a soma dos dois), machos/fêmeas, capação e as
   aplicações nos leitões. Cada animal pode ser marcado como cria de uma gestação.
-- **Conta**: quem tem acesso (só o dono altera), tema e **Baixar tudo em Excel** (cópia de segurança).
+- **Conta**: quem tem acesso e o último acesso de cada pessoa (só o dono altera), tema e **Cópia de segurança**:
+  cópia completa em .zip (dados + fotos + bulas), Excel ou JSON. O dono pode **restaurar** uma cópia .zip ou .json
+  (os dados atuais são substituídos; antes, o site baixa uma cópia deles).
 - **Saúde**: calendário de cada vacina com reforço (Verme a cada 180 dias, Suiven a cada 365, Megabov a cada 120),
   com última e próxima aplicação de cada animal. Dá para registrar uma aplicação em vários animais de uma vez.
 - **Ração**: fórmula de cada fase com a conta de quantos kg vão de cada ingrediente, a partir do total de ração

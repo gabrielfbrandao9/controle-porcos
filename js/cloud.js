@@ -77,6 +77,30 @@
       check(await client.from(TABLES[kind]).delete().eq('id', id));
     },
 
+    // ---------- Restaurar cópia (em lotes) ----------
+
+    async upsertMany(kind, rows) {
+      for (let i = 0; i < rows.length; i += 500) {
+        check(await client.from(TABLES[kind]).upsert(rows.slice(i, i + 500)));
+      }
+    },
+
+    async removeIds(kind, ids) {
+      for (let i = 0; i < ids.length; i += 200) {
+        check(await client.from(TABLES[kind]).delete().in('id', ids.slice(i, i + 200)));
+      }
+    },
+
+    BUCKETS: { fotos: BUCKET, bulas: BULAS },
+
+    async downloadArquivo(bucket, path) {
+      return check(await client.storage.from(bucket).download(path));
+    },
+
+    async uploadArquivo(bucket, path, blob, contentType) {
+      check(await client.storage.from(bucket).upload(path, blob, { contentType, upsert: true }));
+    },
+
     // ---------- Acesso (só o dono altera) ----------
 
     // Com último acesso ao site e último login Google (a função só devolve algo para o dono)

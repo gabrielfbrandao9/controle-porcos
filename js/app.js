@@ -935,17 +935,25 @@
         </section>
       </div>
       <section class="section card"><h2>Cópia de segurança</h2>
-        <p class="muted">Guarde de vez em quando no computador ou no Google Drive. Fotos e arquivos de bula não vão na cópia.</p>
+        <p class="muted">Guarde de vez em quando no computador ou no Google Drive.</p>
         <ul class="copia-opcoes">
+          <li><strong>Cópia completa (.zip)</strong>: todos os dados mais as fotos dos animais e os arquivos de bula.
+            É a melhor para guardar e a que restaura tudo.</li>
           <li><strong>Excel</strong>: uma aba para cada parte do site (animais, gestações, aplicações, abates,
-            lançamentos, resumo por mês, ração e vacinas), fácil de ler e de fazer contas.</li>
-          <li><strong>JSON</strong>: os dados exatamente como estão no banco, com todos os campos. É a cópia
-            completa, para restaurar ou levar para outro sistema.</li>
+            lançamentos, resumo por mês, ração e vacinas), fácil de ler e de fazer contas. Sem fotos e bulas.</li>
+          <li><strong>JSON</strong>: só os dados, exatamente como estão no banco. Sem fotos e bulas.</li>
         </ul>
         <div class="btn-row">
-          <button type="button" class="btn primary" data-act="exportar">${ICON.download} Baixar tudo em Excel</button>
-          <button type="button" class="btn" data-act="exportar-json">${ICON.download} Baixar em JSON</button>
+          <button type="button" class="btn primary" data-act="exportar-zip">${ICON.download} Baixar cópia completa (.zip)</button>
+          <button type="button" class="btn" data-act="exportar">${ICON.download} Excel</button>
+          <button type="button" class="btn" data-act="exportar-json">${ICON.download} JSON</button>
         </div>
+        ${papel === 'dono' ? `<div class="restaurar">
+          <h3>Restaurar cópia</h3>
+          <p class="muted">Escolha uma cópia completa (.zip) ou um JSON baixados daqui. Os dados atuais são substituídos
+            pelos da cópia; antes, o site baixa uma cópia dos dados atuais. Só o dono vê esta opção.</p>
+          <button type="button" class="btn danger-ghost restaurar-btn" data-act="restaurar">${ICON.refresh} Restaurar cópia…</button>
+        </div>` : ''}
       </section>`;
   }
 
@@ -964,7 +972,7 @@
   }
 
   function acessoListaHtml() {
-    if (!acessos) return '<p class="muted">Carregando…</p>';
+    if (!Array.isArray(acessos)) return '<p class="muted">Carregando…</p>';
     return `<ul class="list">${acessos.map((x) => `<li class="list-row acesso-row">
         <span><strong>${esc(x.nome || x.email)}</strong>${x.nome ? `<small>${esc(x.email)}</small>` : ''}
           <small class="ultimo-acesso${x.ultimo_acesso ? '' : ' nunca'}">${x.ultimo_acesso
@@ -987,7 +995,8 @@
 
   async function loadAcessos() {
     try {
-      acessos = await Cloud.acessos();
+      const lista = await Cloud.acessos();
+      acessos = Array.isArray(lista) ? lista : [];
     } catch (err) {
       acessos = [];
       toast(errMsg(err));
@@ -2059,11 +2068,17 @@
     }
   }
 
-  // Cópia completa em JSON: as tabelas do banco como estão (com ids), para restaurar ou migrar
-  function exportarJson() {
+  // ---------- Cópia completa (JSON e ZIP) e restauração ----------
+  //
+  // JSON: as tabelas do banco como estão (com ids). ZIP: o mesmo JSON em "dados.json" mais as
+  // fotos e os arquivos de bula em "arquivos/<bucket>/<caminho>". Restaurar aceita os dois.
+
+  const COPIA_APP = 'controle-porcos';
+
+  function dadosCopia() {
     const tabelas = Object.fromEntries(Object.entries(Cloud.TABLES).map(([kind, tabela]) => [tabela, db[kind]]));
-    const copia = {
-      app: 'controle-porcos',
+    return {
+      app: COPIA_APP,
       formato: 1,
       exportado_em: new Date().toISOString(),
       exportado_por: (user && user.email) || '',
@@ -2071,17 +2086,225 @@
       contagem: Object.fromEntries(Object.entries(tabelas).map(([t, rows]) => [t, rows.length])),
       tabelas,
     };
-    const blob = new Blob([JSON.stringify(copia, null, 2)], { type: 'application/json' });
+  }
+
+  function baixarBlob(blob, nome) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `controle-porcos-${hoje()}.json`;
+    a.download = nome;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-    toast(offline ? 'Cópia baixada (com os dados salvos neste aparelho)' : 'Cópia baixada');
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
+
+  function exportarJson(sufixo = '') {
+    const blob = new Blob([JSON.stringify(dadosCopia(), null, 2)], { type: 'application/json' });
+    baixarBlob(blob, `controle-porcos-${hoje()}${sufixo}.json`);
+    if (!sufixo) toast(offline ? 'Cópia baixada (com os dados salvos neste aparelho)' : 'Cópia baixada');
+  }
+
+  const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+  let jszipPronto = null;
+
+  function carregarJszip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (!jszipPronto) {
+      jszipPronto = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = JSZIP_URL;
+        s.onload = () => resolve(window.JSZip);
+        s.onerror = () => {
+          jszipPronto = null;
+          reject(new Error('não foi possível baixar o gerador de .zip (sem internet?)'));
+        };
+        document.head.appendChild(s);
+      });
+    }
+    return jszipPronto;
+  }
+
+  // Arquivos guardados no Supabase que a cópia completa leva: [{ bucket, path }]
+  function arquivosDaCopia() {
+    const lista = [];
+    db.animais.forEach((a) => { if (a.foto) lista.push({ bucket: Cloud.BUCKETS.fotos, path: a.foto }); });
+    db.produtos.forEach((p) => { if (p.bula_arquivo) lista.push({ bucket: Cloud.BUCKETS.bulas, path: p.bula_arquivo }); });
+    return lista;
+  }
+
+  async function exportarZip(btn) {
+    if (offline) return toast('Sem conexão: a cópia completa precisa baixar as fotos da nuvem.');
+    btn.disabled = true;
+    try {
+      const JSZip = await carregarJszip();
+      const zip = new JSZip();
+      const dados = dadosCopia();
+      const arquivos = arquivosDaCopia();
+      const faltando = [];
+      for (let i = 0; i < arquivos.length; i++) {
+        const f = arquivos[i];
+        toast(`Baixando fotos e bulas… ${i + 1} de ${arquivos.length}`, 20000);
+        try {
+          zip.file(`arquivos/${f.bucket}/${f.path}`, await Cloud.downloadArquivo(f.bucket, f.path));
+        } catch (err) {
+          faltando.push(`${f.bucket}/${f.path}`);
+        }
+      }
+      dados.arquivos = arquivos.map((f) => `${f.bucket}/${f.path}`).filter((p) => !faltando.includes(p));
+      if (faltando.length) dados.arquivos_faltando = faltando;
+      zip.file('dados.json', JSON.stringify(dados, null, 2));
+      zip.file('LEIA-ME.txt', 'Cópia completa do Controle de Porcos.\r\n\r\n'
+        + 'dados.json: todos os dados (animais, gestações, aplicações, abates, lançamentos, ração, vacinas).\r\n'
+        + 'arquivos/: fotos dos animais e arquivos de bula.\r\n\r\n'
+        + 'Para restaurar: no site, Conta > Cópia de segurança > Restaurar cópia, e escolha este .zip.\r\n');
+      toast('Montando o arquivo .zip…', 20000);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      baixarBlob(blob, `controle-porcos-completo-${hoje()}.zip`);
+      toast(faltando.length
+        ? `Cópia baixada, mas ${plural(faltando.length, 'arquivo não pôde', 'arquivos não puderam')} ser incluído(s).`
+        : `Cópia completa baixada (${plural(arquivos.length, 'arquivo', 'arquivos')})`, 6000);
+    } catch (err) {
+      toast(`Não foi possível gerar a cópia: ${err.message}`, 6000);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // Lê um .zip (cópia completa) ou .json: { dados, arquivos: [{ bucket, path, blob }] }
+  async function lerCopia(file) {
+    let dados;
+    const arquivos = [];
+    if (/\.zip$/i.test(file.name) || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
+      const JSZip = await carregarJszip();
+      const zip = await JSZip.loadAsync(file);
+      const j = zip.file('dados.json');
+      if (!j) throw new Error('o .zip não tem o arquivo dados.json (não é uma cópia completa deste site).');
+      dados = JSON.parse(await j.async('string'));
+      const buckets = Object.values(Cloud.BUCKETS);
+      const entradas = zip.file(/^arquivos\//);
+      for (const e of entradas) {
+        const m = e.name.match(/^arquivos\/([^/]+)\/(.+)$/);
+        if (!m || !buckets.includes(m[1])) continue;
+        arquivos.push({ bucket: m[1], path: m[2], blob: await e.async('blob') });
+      }
+    } else {
+      dados = JSON.parse(await file.text());
+    }
+    if (!dados || dados.app !== COPIA_APP || !dados.tabelas || typeof dados.tabelas !== 'object') {
+      throw new Error('este arquivo não é uma cópia do Controle de Porcos.');
+    }
+    if (dados.formato > 1) throw new Error('a cópia foi feita por uma versão mais nova do site; recarregue a página e tente de novo.');
+    return { dados, arquivos };
+  }
+
+  const tipoArquivo = (path) => ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', pdf: 'application/pdf' }[String(path).split('.').pop().toLowerCase()] || 'application/octet-stream');
+
+  // Linhas de uma tabela da cópia prontas para gravar (sem "atualizado_por", que o banco preenche)
+  function linhasCopia(dados, kind) {
+    const rows = dados.tabelas[Cloud.TABLES[kind]];
+    if (rows == null) return [];
+    if (!Array.isArray(rows)) throw new Error(`a tabela ${Cloud.TABLES[kind]} da cópia está com defeito.`);
+    return rows.map((r) => {
+      if (!r || !r.id) throw new Error(`há um registro sem id em ${Cloud.TABLES[kind]}.`);
+      const { atualizado_por: _ap, ...resto } = r;
+      if (kind === 'gestacoes' && resto.nascidos !== undefined && resto.vivos === undefined) {
+        resto.vivos = resto.nascidos; // cópias de antes da troca "nascidos" -> "vivos"
+        delete resto.nascidos;
+      }
+      return resto;
+    });
+  }
+
+  const ORDEM_APAGAR = ['aplicacoes', 'abates', 'lancamentos', 'racoes', 'gestacoes', 'animais', 'produtos'];
+
+  // Substitui os dados atuais pelos da cópia. progresso(texto) mostra em que passo está.
+  async function restaurarCopia({ dados, arquivos }, progresso) {
+    const novos = Object.fromEntries(Object.keys(Cloud.TABLES).map((k) => [k, linhasCopia(dados, k)]));
+    // 1) Apaga o que não existe na cópia (filhos antes dos pais)
+    for (const kind of ORDEM_APAGAR) {
+      const manter = new Set(novos[kind].map((r) => r.id));
+      const apagar = db[kind].filter((r) => !manter.has(r.id)).map((r) => r.id);
+      if (apagar.length) {
+        progresso(`Apagando ${apagar.length} registro(s) que não estão na cópia…`);
+        await Cloud.removeIds(kind, apagar);
+      }
+    }
+    // 2) Grava a cópia (pais antes dos filhos). Animais e gestações se apontam: animais primeiro sem a gestação.
+    progresso('Gravando vacinas e remédios…');
+    await Cloud.upsertMany('produtos', novos.produtos);
+    progresso('Gravando animais…');
+    await Cloud.upsertMany('animais', novos.animais.map((a) => ({ ...a, gestacao_id: null })));
+    progresso('Gravando gestações…');
+    await Cloud.upsertMany('gestacoes', novos.gestacoes);
+    await Cloud.upsertMany('animais', novos.animais);
+    for (const [kind, nome] of [['aplicacoes', 'aplicações'], ['abates', 'abates'], ['lancamentos', 'lançamentos'], ['racoes', 'ração']]) {
+      progresso(`Gravando ${nome}…`);
+      await Cloud.upsertMany(kind, novos[kind]);
+    }
+    // 3) Fotos e bulas que vieram no .zip
+    for (let i = 0; i < arquivos.length; i++) {
+      const f = arquivos[i];
+      progresso(`Enviando fotos e bulas… ${i + 1} de ${arquivos.length}`);
+      await Cloud.uploadArquivo(f.bucket, f.path, f.blob, tipoArquivo(f.path));
+    }
+  }
+
+  async function abrirRestauracao(file) {
+    let copia;
+    try {
+      toast('Lendo a cópia…', 20000);
+      copia = await lerCopia(file);
+      toast('Cópia lida', 1500);
+    } catch (err) {
+      toast(`Não foi possível ler: ${err.message}`, 7000);
+      return;
+    }
+    const { dados, arquivos } = copia;
+    const linhas = Object.entries(Cloud.TABLES).map(([kind, tabela]) => {
+      const nCopia = Array.isArray(dados.tabelas[tabela]) ? dados.tabelas[tabela].length : 0;
+      const nomes = { animais: 'Animais', gestacoes: 'Gestações', produtos: 'Vacinas e remédios', aplicacoes: 'Aplicações', abates: 'Abates', lancamentos: 'Lançamentos', racoes: 'Fases de ração' };
+      return `<tr><th scope="row">${nomes[kind]}</th><td class="num">${db[kind].length}</td><td class="num"><strong>${nCopia}</strong></td></tr>`;
+    }).join('');
+    const quando = dados.exportado_em ? new Date(dados.exportado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '?';
+    openForm({
+      title: 'Restaurar cópia',
+      intro: `Cópia de <strong>${esc(quando)}</strong>${dados.exportado_por ? `, feita por ${esc(dados.exportado_por)}` : ''}.
+        ${arquivos.length ? `Traz ${plural(arquivos.length, 'foto ou bula', 'fotos e bulas')}.` : 'Não traz fotos nem bulas (só dados).'}`,
+      fields: [
+        { name: 'confirmo', label: 'Entendo que os dados atuais serão substituídos pelos da cópia', type: 'checkbox' },
+      ],
+      submitLabel: 'Restaurar',
+      onSave: async (v) => {
+        if (!v.confirmo) throw new Error('Marque a caixa de confirmação para restaurar.');
+        const p = $('#restauroProgresso', form);
+        const progresso = (t) => { p.hidden = false; p.textContent = t; };
+        progresso('Baixando uma cópia dos dados atuais, por segurança…');
+        exportarJson('-antes-de-restaurar');
+        try {
+          await restaurarCopia(copia, progresso);
+        } catch (err) {
+          await reload(true).catch(() => {});
+          throw new Error(`a restauração parou no meio (${errMsg(err).replace('Não foi possível salvar: ', '')}). Os dados podem ter ficado misturados: tente de novo, ou restaure o arquivo "-antes-de-restaurar" que foi baixado.`);
+        }
+        progresso('Atualizando a tela…');
+        await reload(true);
+        return 'Cópia restaurada';
+      },
+    });
+    $('.fields', form).insertAdjacentHTML('afterbegin', `<div class="field">
+        <table class="table compact"><thead><tr><th></th><th class="num">Agora</th><th class="num">Na cópia</th></tr></thead><tbody>${linhas}</tbody></table>
+        <p class="aviso-parentesco">Tudo o que não estiver na cópia será apagado. Antes de começar, o site baixa uma cópia dos dados atuais.
+          A lista de quem tem acesso não muda.</p>
+      </div>`);
+    $('.fields', form).insertAdjacentHTML('beforeend', '<p class="hint" id="restauroProgresso" hidden></p>');
+  }
+
+  $('#restaurarInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) abrirRestauracao(file);
+  });
 
   // ---------- Ações ----------
 
@@ -2112,6 +2335,11 @@
     'fotos-lote': () => $('#fotosLote').click(),
     exportar: (el) => exportarExcel(el),
     'exportar-json': () => exportarJson(),
+    'exportar-zip': (el) => exportarZip(el),
+    restaurar: () => {
+      if (papel !== 'dono' || offline) return toast('Só o dono pode restaurar, e precisa estar com internet.');
+      $('#restaurarInput').click();
+    },
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
     reload: () => reload(),
