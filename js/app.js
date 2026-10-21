@@ -935,10 +935,17 @@
         </section>
       </div>
       <section class="section card"><h2>Cópia de segurança</h2>
-        <p class="muted">Baixa todos os dados numa planilha do Excel, com uma aba para cada parte do site
-          (animais, gestações, aplicações, abates, lançamentos, resumo por mês, ração e vacinas).
-          Guarde de vez em quando no computador ou no Google Drive. Fotos e arquivos de bula não vão na planilha.</p>
-        <button type="button" class="btn primary" data-act="exportar">${ICON.download} Baixar tudo em Excel</button>
+        <p class="muted">Guarde de vez em quando no computador ou no Google Drive. Fotos e arquivos de bula não vão na cópia.</p>
+        <ul class="copia-opcoes">
+          <li><strong>Excel</strong>: uma aba para cada parte do site (animais, gestações, aplicações, abates,
+            lançamentos, resumo por mês, ração e vacinas), fácil de ler e de fazer contas.</li>
+          <li><strong>JSON</strong>: os dados exatamente como estão no banco, com todos os campos. É a cópia
+            completa, para restaurar ou levar para outro sistema.</li>
+        </ul>
+        <div class="btn-row">
+          <button type="button" class="btn primary" data-act="exportar">${ICON.download} Baixar tudo em Excel</button>
+          <button type="button" class="btn" data-act="exportar-json">${ICON.download} Baixar em JSON</button>
+        </div>
       </section>`;
   }
 
@@ -2052,6 +2059,30 @@
     }
   }
 
+  // Cópia completa em JSON: as tabelas do banco como estão (com ids), para restaurar ou migrar
+  function exportarJson() {
+    const tabelas = Object.fromEntries(Object.entries(Cloud.TABLES).map(([kind, tabela]) => [tabela, db[kind]]));
+    const copia = {
+      app: 'controle-porcos',
+      formato: 1,
+      exportado_em: new Date().toISOString(),
+      exportado_por: (user && user.email) || '',
+      dados_carregados_em: loadedAt ? new Date(loadedAt).toISOString() : null,
+      contagem: Object.fromEntries(Object.entries(tabelas).map(([t, rows]) => [t, rows.length])),
+      tabelas,
+    };
+    const blob = new Blob([JSON.stringify(copia, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `controle-porcos-${hoje()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast(offline ? 'Cópia baixada (com os dados salvos neste aparelho)' : 'Cópia baixada');
+  }
+
   // ---------- Ações ----------
 
   const ACTIONS = {
@@ -2080,6 +2111,7 @@
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
     'fotos-lote': () => $('#fotosLote').click(),
     exportar: (el) => exportarExcel(el),
+    'exportar-json': () => exportarJson(),
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
     reload: () => reload(),
