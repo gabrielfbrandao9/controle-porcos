@@ -946,10 +946,23 @@
     return location.origin + location.pathname;
   }
 
+  // Data e hora no fuso do aparelho: "hoje às 14:32", "ontem às 07:01", "16/10/2026 às 07:01"
+  function fmtQuando(ts) {
+    const d = new Date(ts);
+    const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dias = diffDays(U.iso(d), hoje());
+    if (dias === 0) return `hoje às ${hora}`;
+    if (dias === 1) return `ontem às ${hora}`;
+    return `${d.toLocaleDateString('pt-BR')} às ${hora} (há ${dias} dias)`;
+  }
+
   function acessoListaHtml() {
     if (!acessos) return '<p class="muted">Carregando…</p>';
     return `<ul class="list">${acessos.map((x) => `<li class="list-row acesso-row">
-        <span><strong>${esc(x.nome || x.email)}</strong>${x.nome ? `<small>${esc(x.email)}</small>` : ''}</span>
+        <span><strong>${esc(x.nome || x.email)}</strong>${x.nome ? `<small>${esc(x.email)}</small>` : ''}
+          <small class="ultimo-acesso${x.ultimo_acesso ? '' : ' nunca'}">${x.ultimo_acesso
+            ? `Último acesso: ${esc(fmtQuando(x.ultimo_acesso))}`
+            : 'Ainda não abriu o site'}</small></span>
         <span class="right">${x.papel === 'dono' ? '<span class="badge ok">Dono</span>' : `
           <select data-act-change="acesso-papel" data-email="${esc(x.email)}" aria-label="Permissão de ${esc(x.email)}">
             <option value="leitor"${x.papel === 'leitor' ? ' selected' : ''}>Só ver</option>
@@ -2112,7 +2125,7 @@
     if (!el) return;
     try {
       const r = await Cloud.updateAcesso(el.dataset.email, { papel: el.value });
-      acessos = acessos.map((x) => (x.email === r.email ? r : x));
+      acessos = acessos.map((x) => (x.email === r.email ? { ...x, ...r } : x)); // mantém o último acesso
       toast('Permissão alterada');
     } catch (err) {
       toast(errMsg(err));
@@ -2231,6 +2244,7 @@
         showGate('noaccess');
         return;
       }
+      Cloud.registrarAcesso().catch(() => {}); // "Último acesso" em Conta → Quem tem acesso
       db = await Cloud.loadAll();
       loadedAt = Date.now();
       offline = false;
@@ -2267,6 +2281,7 @@
         return;
       }
       papel = novoPapel;
+      Cloud.registrarAcesso().catch(() => {});
       db = await Cloud.loadAll();
       loadedAt = Date.now();
       offline = false;

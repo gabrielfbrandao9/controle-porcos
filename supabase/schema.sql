@@ -92,6 +92,40 @@ create policy "Dono remove" on public.porcos_acesso
 revoke all on public.porcos_acesso from anon;
 grant select, insert, update, delete on public.porcos_acesso to authenticated;
 
+-- Última vez que cada pessoa da lista abriu o site (o próprio site registra ao abrir)
+alter table public.porcos_acesso add column if not exists ultimo_acesso timestamptz;
+
+-- Registra o acesso de quem está usando (no máximo a cada 5 minutos)
+create or replace function public.porcos_registrar_acesso()
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  update public.porcos_acesso
+  set ultimo_acesso = now()
+  where email = public.meu_email()
+    and (ultimo_acesso is null or ultimo_acesso < now() - interval '5 minutes');
+$$;
+
+-- Lista de acesso com o último acesso ao site e o último login Google (só o dono vê)
+create or replace function public.porcos_acessos()
+returns table (email text, papel text, nome text, adicionado_em timestamptz, ultimo_acesso timestamptz, ultimo_login timestamptz)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select a.email, a.papel, a.nome, a.adicionado_em, a.ultimo_acesso, u.last_sign_in_at
+  from public.porcos_acesso a
+  left join auth.users u on lower(u.email) = a.email
+  where public.porcos_papel() = 'dono'
+  order by a.adicionado_em;
+$$;
+
+revoke all on function public.porcos_registrar_acesso(), public.porcos_acessos() from anon, public;
+grant execute on function public.porcos_registrar_acesso(), public.porcos_acessos() to authenticated;
+
 -- Dono: só na primeira vez, troque o e-mail abaixo pelo da conta Google do dono e
 -- tire os "--" da frente das três linhas. (O dono não pode ser criado pelo site.)
 -- insert into public.porcos_acesso (email, papel, nome)

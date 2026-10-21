@@ -418,6 +418,8 @@ button.dose:hover { border-color: var(--accent); }
 .account-card { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .account-card > div { flex: 1; min-width: 180px; }
 .account-card .badge { margin-top: 4px; }
+.acesso-row .ultimo-acesso { margin-top: 2px; }
+.acesso-row .ultimo-acesso.nunca { color: var(--warn); }
 .acesso-row .right { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .acesso-row select { min-height: 32px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 0.85rem; }
 .acesso-form { display: grid; grid-template-columns: 2fr 1.4fr 1fr auto; gap: 10px; align-items: end; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); }

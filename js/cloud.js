@@ -79,8 +79,14 @@
 
     // ---------- Acesso (só o dono altera) ----------
 
+    // Com último acesso ao site e último login Google (a função só devolve algo para o dono)
     async acessos() {
-      return check(await client.from('porcos_acesso').select('email, papel, nome, adicionado_em').order('adicionado_em'));
+      return check(await client.rpc('porcos_acessos'));
+    },
+
+    // Marca que quem está usando abriu o site agora
+    async registrarAcesso() {
+      check(await client.rpc('porcos_registrar_acesso'));
     },
 
     async addAcesso(row) {
