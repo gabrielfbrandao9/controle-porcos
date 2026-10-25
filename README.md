@@ -17,7 +17,8 @@ quem decide é o dono, na tela **Conta**. Veja [SUPABASE.md](SUPABASE.md).
 - **Crias**: gestações de cada matriz, com o barrão (pai). O site avisa se o barrão for parente da matriz.
   Enquanto o dia do parto não for preenchido, ele fica previsto para 114 dias depois do cruzamento; depois do
   parto, registre vivos e mortos (o site mostra os nascidos, a soma dos dois), machos/fêmeas, capação e as
-  aplicações nos leitões. Cada animal pode ser marcado como cria de uma gestação.
+  aplicações nos leitões. Cada animal pode ser marcado como cria de uma gestação: aí as aplicações que ele
+  tomou como cria aparecem na ficha dele (marcadas "cria") e contam no calendário de Saúde.
 - **Conta**: quem tem acesso e o último acesso de cada pessoa (só o dono altera), tema e **Cópia de segurança**:
   cópia completa em .zip (dados + fotos + bulas), Excel ou JSON. O dono pode **restaurar** uma cópia .zip ou .json
   (os dados atuais são substituídos; antes, o site baixa uma cópia deles).

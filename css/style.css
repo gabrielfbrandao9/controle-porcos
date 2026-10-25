@@ -366,6 +366,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 button.dose { cursor: pointer; }
 button.dose:hover { border-color: var(--accent); }
+.dose.de-cria { border-style: dashed; }
+.dose small { color: var(--muted); font-weight: 400; margin-left: 2px; }
 
 /* ---------- Tabelas ---------- */
 

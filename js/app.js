@@ -125,14 +125,28 @@
     return daysUntil(partoDe(g)) >= 0 ? 'prevista' : 'pendente';
   }
 
-  const aplicacoesAnimal = (id) => sortByDate(db.aplicacoes.filter((x) => x.animal_id === id));
+  const ordemAplicacao = (a, b) => a.data.localeCompare(b.data) || String(a.criado_em || '').localeCompare(String(b.criado_em || '')) || a.id.localeCompare(b.id);
+
+  // Aplicações de um animal mais as que ele tomou quando era cria (as da gestação em que nasceu),
+  // sem repetir as já lançadas no próprio animal (mesmo produto no mesmo dia). As de cria vêm com
+  // animal_id preenchido e deCria = true; o id continua o da aplicação da gestação.
+  function aplicacoesAnimal(id) {
+    const a = animal(id);
+    const proprias = db.aplicacoes.filter((x) => x.animal_id === id);
+    const deCria = a && a.gestacao_id
+      ? db.aplicacoes
+        .filter((x) => x.gestacao_id === a.gestacao_id && !proprias.some((p) => p.produto_id === x.produto_id && p.data === x.data))
+        .map((x) => ({ ...x, animal_id: id, deCria: true }))
+      : [];
+    return [...proprias, ...deCria].sort(ordemAplicacao);
+  }
   const aplicacoesCria = (id) => sortByDate(db.aplicacoes.filter((x) => x.gestacao_id === id));
 
-  // Número da dose: posição da aplicação entre as do mesmo produto no mesmo animal (ou crias), por data
+  // Número da dose: posição da aplicação entre as do mesmo produto no mesmo animal (contando as de
+  // quando era cria) ou nas crias da gestação, por data
   function numeroDose(ap) {
-    const mesmas = db.aplicacoes
-      .filter((x) => x.produto_id === ap.produto_id && x.animal_id === ap.animal_id && x.gestacao_id === ap.gestacao_id)
-      .sort((a, b) => a.data.localeCompare(b.data) || String(a.criado_em || '').localeCompare(String(b.criado_em || '')) || a.id.localeCompare(b.id));
+    const mesmas = (ap.animal_id ? aplicacoesAnimal(ap.animal_id) : db.aplicacoes.filter((x) => x.gestacao_id === ap.gestacao_id).sort(ordemAplicacao))
+      .filter((x) => x.produto_id === ap.produto_id);
     return mesmas.findIndex((x) => x.id === ap.id) + 1;
   }
 
@@ -174,7 +188,7 @@
     const produtos = produtosOrdenados().filter((p) => p.intervalo_dias);
     for (const p of produtos) {
       for (const a of sortAnimais(db.animais.filter((x) => todos || noPlantel(x)))) {
-        const aps = sortByDate(db.aplicacoes.filter((x) => x.animal_id === a.id && x.produto_id === p.id));
+        const aps = aplicacoesAnimal(a.id).filter((x) => x.produto_id === p.id);
         const saiu = !noPlantel(a);
         if (saiu && !aps.length) continue;
         const ultima = aps.length ? aps[aps.length - 1].data : null;
@@ -502,11 +516,15 @@
       ${abateHtml}`;
   }
 
+  // Aplicação de quando o animal era cria: marcada com "cria" (editar muda a aplicação de todas as crias)
   function doseChip(ap, label) {
-    const title = ap.obs ? ` title="${esc(ap.obs)}"` : '';
+    const dica = [ap.deCria ? 'Tomou quando era cria (aplicação lançada nas crias da gestação)' : '', ap.obs || ''].filter(Boolean).join(' · ');
+    const title = dica ? ` title="${esc(dica)}"` : '';
+    const cls = ap.deCria ? 'dose de-cria' : 'dose';
+    const texto = `${esc(label)}${ap.deCria ? ' <small>cria</small>' : ''}`;
     return canEdit()
-      ? `<button type="button" class="dose" data-act="aplicacao-edit" data-id="${ap.id}"${title}>${esc(label)}</button>`
-      : `<span class="dose"${title}>${esc(label)}</span>`;
+      ? `<button type="button" class="${cls}" data-act="aplicacao-edit" data-id="${ap.id}"${title}>${texto}</button>`
+      : `<span class="${cls}"${title}>${texto}</span>`;
   }
 
   // ---------- Crias ----------
@@ -606,6 +624,8 @@
     const cal = calendario(todos);
     const produtos = produtosOrdenados();
     const comReforco = produtos.filter((p) => p.intervalo_dias);
+    // Aplicações de cada animal, contando as de quando era cria
+    const apsAnimais = db.animais.flatMap((a) => aplicacoesAnimal(a.id));
 
     const calHtml = comReforco.map((p) => {
       const rows = cal.filter((r) => r.produto.id === p.id);
@@ -624,7 +644,7 @@
     // Com "Mostrar doses aplicadas", uma linha por animal com todas as doses.
     const nenhuma = `<p class="muted">Nenhuma aplicação em ${todos ? 'animais' : 'animais do plantel'}. As das crias ficam em <a href="#/crias">Crias</a>.</p>`;
     const esporadicoHtml = produtos.filter((p) => !p.intervalo_dias).map((p) => {
-      const aps = sortByDate(db.aplicacoes.filter((x) => x.produto_id === p.id && apNoFiltro(x)), 'data', true);
+      const aps = sortByDate(apsAnimais.filter((x) => x.produto_id === p.id && apNoFiltro(x)), 'data', true);
       let corpo;
       if (!aps.length) {
         corpo = nenhuma;
@@ -653,7 +673,7 @@
           <tbody>${mostra.map((x) => `<tr${canEdit() ? ` class="clickable" data-act="aplicacao-edit" data-id="${x.id}"` : ''}>
             <td>${esc(fmtDate(x.data))}</td>
             <td><a href="#/animal/${x.animal_id}">${esc(nomeAnimal(x.animal_id))}</a>${x.obs ? `<small class="muted block">${esc(x.obs)}</small>` : ''}</td>
-            <td>${dose(numeroDose(x))}</td></tr>`).join('')}</tbody>
+            <td>${dose(numeroDose(x))}${x.deCria ? '<small class="muted block">de cria</small>' : ''}</td></tr>`).join('')}</tbody>
         </table></div>
         ${aps.length > mostra.length ? `<button type="button" class="btn small ghost" data-act="esporadico-todos" data-id="${p.id}">Mostrar todas (${aps.length})</button>` : ''}`;
       }
@@ -1423,8 +1443,9 @@
     </div>
     ${varios ? '' : '<div class="field ja-aplicadas" id="jaAplicadas"></div>'}`);
 
-    // Doses que o alvo já tem do produto escolhido
-    const dosesDe = (alvoId, campo) => sortByDate(db.aplicacoes.filter((x) => x.produto_id === form.elements.produto_id.value && x[campo] === alvoId));
+    // Doses que o alvo já tem do produto escolhido (num animal, contando as de quando era cria)
+    const dosesDe = (alvoId, campo) => (campo === 'animal_id' ? aplicacoesAnimal(alvoId) : aplicacoesCria(alvoId))
+      .filter((x) => x.produto_id === form.elements.produto_id.value);
 
     // Mostra as doses já registradas e numera os campos a partir da dose seguinte
     function atualizarDoses() {
