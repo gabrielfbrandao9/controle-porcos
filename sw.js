@@ -8,12 +8,13 @@
  *
  * Ao mudar a lista de arquivos, aumente a versão para limpar o cache antigo.
  */
-const VERSION = 'v25';
+const VERSION = 'v26';
 const CACHE = `porcos-${VERSION}`;
 
 const APP_FILES = [
   './',
   'index.html',
+  'privacidade.html',
   'manifest.webmanifest',
   'css/style.css',
   'js/config.js',

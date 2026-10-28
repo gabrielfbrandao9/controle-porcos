@@ -49,6 +49,11 @@
       check(await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: redirectTo() } }));
     },
 
+    // Link de acesso por e-mail (para quem não usa a conta Google)
+    async signInWithEmail(email) {
+      check(await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo() } }));
+    },
+
     async signOut() {
       check(await client.auth.signOut());
     },
@@ -75,6 +80,11 @@
 
     async remove(kind, id) {
       check(await client.from(TABLES[kind]).delete().eq('id', id));
+    },
+
+    // Alteração feita sem internet: não falha se o registro já foi apagado em outro aparelho
+    async updateSeExistir(kind, id, patch) {
+      check(await client.from(TABLES[kind]).update(patch).eq('id', id));
     },
 
     // ---------- Restaurar cópia (em lotes) ----------

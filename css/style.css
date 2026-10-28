@@ -275,6 +275,16 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .list-row.clickable:hover { background: var(--surface-2); }
 
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.chips .chip.dim { opacity: .5; }
+.busca { width: 100%; margin: 0 0 12px; padding: 10px 12px; font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: 10px; }
+.busca:focus { outline: none; border-color: var(--accent); }
+.gate-email { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.gate-sep { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin: 4px 0 2px; }
+.gate-sep::before, .gate-sep::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+.gate-email input { padding: 11px 12px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; }
+.gate-priv { margin: 14px 0 0; font-size: 13px; }
+.gate-priv a { color: var(--muted); }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px;
   border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface);

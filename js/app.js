@@ -87,7 +87,7 @@
   let installPrompt = null;
   let toastTimer = null;
 
-  const canEdit = () => !offline && (papel === 'dono' || papel === 'editor');
+  const canEdit = () => papel === 'dono' || papel === 'editor';
   const editBtn = (html) => (canEdit() ? html : '');
 
   // ---------- Consultas nos dados ----------
@@ -241,15 +241,20 @@
       conta: renderConta,
     };
     view.innerHTML = banners() + (pages[current.name] || renderInicio)();
+    if (current.name === 'animais') filtrarAnimais();
     if (current.name === 'conta' && papel === 'dono') loadAcessos();
   }
 
   function banners() {
+    const n = fila.length;
+    const pend = n ? ` <strong>${n} ${n === 1 ? 'alteração guardada' : 'alterações guardadas'}</strong> neste aparelho ${n === 1 ? 'vai' : 'vão'} para a nuvem quando a internet voltar.` : '';
     if (offline) {
       const quando = loadedAt ? new Date(loadedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '';
       return `<div class="banner warn"><p><strong>Sem conexão com a nuvem.</strong> Mostrando os dados salvos neste aparelho${quando ? ` em ${esc(quando)}` : ''}.
-        Para editar, conecte-se à internet.</p><button type="button" class="btn small" data-act="reload">Tentar de novo</button></div>`;
+        ${canEdit() ? `Dá para continuar anotando.${pend} Fotos, bulas e excluir animais ou gestações precisam de internet.` : ''}</p>
+        <button type="button" class="btn small" data-act="reload">Tentar de novo</button></div>`;
     }
+    if (n) return `<div class="banner warn"><p>${pend}</p><button type="button" class="btn small" data-act="reload">Enviar agora</button></div>`;
     return '';
   }
 
@@ -407,23 +412,49 @@
     const f = filters.animais;
     const counts = { plantel: 0, venda: 0, abate: 0, morte: 0, todos: db.animais.length };
     db.animais.forEach((a) => { counts[a.saida || 'plantel']++; });
-    const list = sortAnimais(db.animais.filter((a) => f === 'todos' || (a.saida || 'plantel') === f));
+    const list = sortAnimais(db.animais);
     const chip = (v, label) => `<button type="button" class="chip${f === v ? ' on' : ''}" data-act="filter-animais" data-value="${v}">${label} <span class="n">${counts[v]}</span></button>`;
 
+    // Todos os cartões ficam na página; a situação e a busca só escondem (ver filtrarAnimais).
     const cards = list.length
-      ? `<div class="animal-grid">${list.map((a) => `<a class="animal-card" href="#/animal/${a.id}">
+      ? `<div class="animal-grid" id="animalGrid">${list.map((a) => `<a class="animal-card" href="#/animal/${a.id}" data-sit="${a.saida || 'plantel'}"
+          data-busca="${esc(normBusca([a.nome, CATEGORIAS[a.categoria], a.negociado_com, a.obs].join(' ')))}">
           ${fotoHtml(a, 'large')}
           <span class="animal-info">
             <strong>${esc(a.nome)}</strong>
             <small>${esc(CATEGORIAS[a.categoria])} · ${esc(idadeAnimal(a))}</small>
             ${a.saida ? `<span class="badge muted">${esc(statusAnimal(a))} em ${esc(fmtDate(a.saida_data))}</span>` : `<small class="muted">${esc(AQUISICAO[a.aquisicao])}</small>`}
           </span></a>`).join('')}</div>`
-      : '<div class="empty-box"><p>Nenhum animal aqui.</p></div>';
+      : '';
 
     return `${pageHead('Animais', 'Todos os animais que já passaram pelo plantel', editBtn(`<button type="button" class="btn" data-act="fotos-lote" title="Enviar várias fotos: cada arquivo vai para o animal com o mesmo nome">${ICON.camera} Fotos em lote</button>
       <button type="button" class="btn primary" data-act="animal-new">${ICON.plus} Animal</button>`))}
+      ${db.animais.length > 6 ? `<input type="search" id="buscaAnimais" class="busca" placeholder="Buscar animal pelo nome, categoria, de quem comprou ou observação" aria-label="Buscar animal" autocomplete="off" value="${esc(buscaAnimais)}">` : ''}
       <div class="chips">${chip('plantel', 'No plantel')}${chip('venda', SAIDA_FILTRO.venda)}${chip('abate', SAIDA_FILTRO.abate)}${chip('morte', SAIDA_FILTRO.morte)}${chip('todos', 'Todos')}</div>
-      ${cards}`;
+      ${cards}
+      <div class="empty-box" id="animaisVazio" hidden><p id="animaisVazioTxt">Nenhum animal aqui.</p></div>`;
+  }
+
+  // Busca: sem acento e sem diferença entre maiúsculas e minúsculas. Com texto, procura em todas as situações.
+  let buscaAnimais = '';
+  const normBusca = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function filtrarAnimais() {
+    const grid = $('#animalGrid');
+    const vazio = $('#animaisVazio');
+    if (!vazio) return;
+    const q = normBusca(buscaAnimais.trim());
+    const f = filters.animais;
+    let n = 0;
+    if (grid) {
+      grid.querySelectorAll('.animal-card').forEach((c) => {
+        const ok = q ? c.dataset.busca.includes(q) : f === 'todos' || c.dataset.sit === f;
+        c.hidden = !ok;
+        if (ok) n++;
+      });
+    }
+    vazio.hidden = n > 0;
+    $('#animaisVazioTxt').textContent = q ? `Nenhum animal com “${buscaAnimais.trim()}”.` : 'Nenhum animal aqui.';
+    $$('.chips .chip', view).forEach((c) => c.classList.toggle('dim', !!q));
   }
 
   function renderAnimal(id) {
@@ -923,11 +954,11 @@
 
     const acessoHtml = papel === 'dono' ? `<section class="section card">
         <h2>Quem tem acesso</h2>
-        <p class="muted">A pessoa entra em <strong>${esc(siteUrl())}</strong> com a conta Google do e-mail cadastrado aqui.
-          Não chega e-mail nenhum: avise você mesmo.</p>
+        <p class="muted">A pessoa entra em <strong>${esc(siteUrl())}</strong> com a conta Google do e-mail cadastrado aqui
+          (ou pelo link de acesso que ela pede na tela de entrar). Avise pelo botão <strong>Avisar</strong>.</p>
         <div id="acessoLista">${acessoListaHtml()}</div>
         <form class="acesso-form" id="acessoForm" autocomplete="off">
-          <label class="field"><span>E-mail (Google)</span><input name="email" type="email" required placeholder="nome@gmail.com"></label>
+          <label class="field"><span>E-mail</span><input name="email" type="email" required placeholder="nome@gmail.com"></label>
           <label class="field"><span>Nome</span><input name="nome" placeholder="Opcional"></label>
           <label class="field"><span>Permissão</span><select name="papel"><option value="leitor">Só ver</option><option value="editor">Pode editar</option></select></label>
           <button class="btn primary">${ICON.plus} Dar acesso</button>
@@ -947,13 +978,15 @@
           <div class="seg" role="group" aria-label="Tema">${tema('auto', 'Automático')}${tema('light', 'Claro')}${tema('dark', 'Escuro')}</div>
         </section>
         <section class="section card"><h2>Dados</h2>
-          <p class="muted">${quando ? `Carregados às ${esc(quando)}. ` : ''}O site busca as novidades sozinho ao voltar para ele.</p>
+          <p class="muted">${quando ? `Carregados às ${esc(quando)}. ` : ''}O site busca as novidades sozinho ao voltar para ele.
+            Sem internet, dá para continuar anotando: as alterações ficam neste aparelho e vão para a nuvem quando a conexão voltar.</p>
           <div class="btn-row">
             <button type="button" class="btn" data-act="reload">${ICON.refresh} Atualizar agora</button>
             <button type="button" class="btn ghost" data-act="install" ${installPrompt ? '' : 'hidden'}>Instalar app</button>
           </div>
         </section>
       </div>
+      <p class="muted small" style="margin:-4px 0 16px"><a href="privacidade.html">Política de privacidade</a>: quais dados o site guarda e como pedir para apagar.</p>
       <section class="section card"><h2>Cópia de segurança</h2>
         <p class="muted">Guarde de vez em quando no computador ou no Google Drive.</p>
         <ul class="copia-opcoes">
@@ -1009,7 +1042,7 @@
   }
 
   function whatsLink(x) {
-    const txt = `Liberei para você o Controle de Porcos (${x.papel === 'editor' ? 'pode ver e editar' : 'só para ver'}). Entre com a conta Google ${x.email}: ${siteUrl()}`;
+    const txt = `Liberei para você o Controle de Porcos (${x.papel === 'editor' ? 'pode ver e editar' : 'só para ver'}). Abra ${siteUrl()} e entre com ${x.email} (pela conta Google ou pelo link que chega no e-mail).`;
     return `https://wa.me/?text=${encodeURIComponent(txt)}`;
   }
 
@@ -1183,26 +1216,134 @@
 
   // ---------- Gravação ----------
 
+  // Cada gravação tenta ir direto para o banco. Sem internet, ela é feita aqui (no aparelho)
+  // e entra numa fila, enviada na ordem assim que a conexão volta.
+
+  const filaKey = () => `porcos:fila:${user.id}`;
+  let fila = [];
+  let enviando = null;
+
+  function lerFila() {
+    try { fila = JSON.parse(localStorage.getItem(filaKey()) || '[]'); } catch (e) { fila = []; }
+    if (!Array.isArray(fila)) fila = [];
+  }
+  function gravarFila() {
+    try { localStorage.setItem(filaKey(), JSON.stringify(fila)); } catch (e) { /* sem espaço */ }
+  }
+  const semRede = (err) => !navigator.onLine || /failed to fetch|networkerror|load failed|network request failed/i.test((err && err.message) || String(err || ''));
+  function novoId() {
+    if (crypto.randomUUID) return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  }
+
+  function naFila(op) {
+    fila.push(op);
+    gravarFila();
+    offline = true;
+    saveCache();
+  }
+
+  // Envia a fila. Lança erro se faltar internet (o resto continua na fila).
+  function enviarFila() {
+    if (!enviando) {
+      enviando = (async () => {
+        let enviadas = 0;
+        let descartadas = 0;
+        try {
+          while (fila.length) {
+            const o = fila[0];
+            try {
+              if (o.op === 'insert') await Cloud.upsertMany(o.kind, [o.row]);
+              else if (o.op === 'update') await Cloud.updateSeExistir(o.kind, o.id, o.row);
+              else await Cloud.remove(o.kind, o.id);
+              enviadas++;
+            } catch (err) {
+              if (semRede(err)) throw err;
+              console.warn('Alteração recusada pelo banco', o, err);
+              descartadas++;
+            }
+            fila.shift();
+            gravarFila();
+          }
+        } finally {
+          enviando = null;
+          if (enviadas || descartadas) {
+            toast(descartadas
+              ? `${enviadas} ${enviadas === 1 ? 'alteração enviada' : 'alterações enviadas'}; ${descartadas} recusada${descartadas > 1 ? 's' : ''} pelo banco (sem permissão ou dado inválido).`
+              : `${enviadas} ${enviadas === 1 ? 'alteração feita sem internet foi enviada' : 'alterações feitas sem internet foram enviadas'}.`, 6000);
+          }
+        }
+      })();
+    }
+    return enviando;
+  }
+
+  // Antes de gravar direto no banco, manda o que está na fila (para manter a ordem).
+  async function online() {
+    if (!navigator.onLine) return false;
+    if (!fila.length) return true;
+    try { await enviarFila(); return true; } catch (e) { return false; }
+  }
+
   async function save(kind, id, row) {
+    if (await online()) {
+      try {
+        if (id) {
+          const r = await Cloud.update(kind, id, row);
+          db[kind] = db[kind].map((x) => (x.id === id ? r : x));
+          return r;
+        }
+        const [r] = await Cloud.insert(kind, [row]);
+        db[kind].push(r);
+        return r;
+      } catch (err) {
+        if (!semRede(err)) throw err;
+      }
+    }
+    const agora = new Date().toISOString();
     if (id) {
-      const r = await Cloud.update(kind, id, row);
+      const r = { ...byId(kind, id), ...row, atualizado_em: agora };
       db[kind] = db[kind].map((x) => (x.id === id ? r : x));
+      naFila({ op: 'update', kind, id, row });
       return r;
     }
-    const [r] = await Cloud.insert(kind, [row]);
+    const r = { ...row, id: novoId(), criado_em: agora, atualizado_em: agora };
     db[kind].push(r);
+    naFila({ op: 'insert', kind, id: r.id, row: { ...row, id: r.id } });
     return r;
   }
 
   async function saveMany(kind, rows) {
-    const list = await Cloud.insert(kind, rows);
-    db[kind].push(...list);
+    if (await online()) {
+      try {
+        const list = await Cloud.insert(kind, rows);
+        db[kind].push(...list);
+        return list;
+      } catch (err) {
+        if (!semRede(err)) throw err;
+      }
+    }
+    const list = [];
+    for (const row of rows) list.push(await save(kind, null, row));
     return list;
   }
 
   async function remove(kind, id) {
-    await Cloud.remove(kind, id);
+    if (await online()) {
+      try {
+        await Cloud.remove(kind, id);
+        db[kind] = db[kind].filter((x) => x.id !== id);
+        return;
+      } catch (err) {
+        if (!semRede(err)) throw err;
+      }
+    }
     db[kind] = db[kind].filter((x) => x.id !== id);
+    naFila({ op: 'remove', kind, id });
   }
 
   // ---------- Formulários de cada coisa ----------
@@ -1546,6 +1687,7 @@
           arquivo = $('[name="bula_file"]', form).files[0] || null;
           if (arquivo && !BULA_TIPOS.includes(arquivo.type)) throw new Error('A bula precisa ser um PDF ou uma foto (JPG, PNG ou WEBP).');
           if (arquivo && arquivo.size > BULA_MAX) throw new Error('O arquivo da bula passa de 20 MB.');
+          if (arquivo && !navigator.onLine) throw new Error('Para enviar o arquivo da bula, conecte-se à internet.');
           row.bula = '';
           if (!arquivo && !antigo) row.bula_arquivo = null;
         }
@@ -2415,6 +2557,11 @@
   });
 
   view.addEventListener('input', (e) => {
+    if (e.target.id === 'buscaAnimais') {
+      buscaAnimais = e.target.value;
+      filtrarAnimais();
+      return;
+    }
     if (e.target.id !== 'racaoQtd') return;
     const n = parseNum(e.target.value);
     if (n == null || Number.isNaN(n) || n < 0) return;
@@ -2461,9 +2608,26 @@
     $('#gate').hidden = false;
     const body = $('#gateBody');
     if (kind === 'login') {
-      body.innerHTML = `<p class="muted">Entre com a conta Google que recebeu acesso.</p>
+      body.innerHTML = `<p class="muted">Entre com o e-mail que recebeu acesso.</p>
         <button type="button" class="btn google" id="btnGoogle">${ICON.google} Entrar com Google</button>
-        <p class="gate-msg" id="gateMsg"></p>`;
+        <form class="gate-email" id="gateEmail" autocomplete="on">
+          <p class="gate-sep"><span>ou receba um link por e-mail</span></p>
+          <input type="email" id="gateEmailInput" placeholder="seu e-mail" required autocomplete="email" aria-label="Seu e-mail">
+          <button type="submit" class="btn">Enviar link de acesso</button>
+        </form>
+        <p class="gate-msg" id="gateMsg"></p>
+        <p class="gate-priv"><a href="privacidade.html">Política de privacidade</a></p>`;
+      $('#gateEmail').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = $('#gateEmailInput').value.trim().toLowerCase();
+        $('#gateMsg').textContent = 'Enviando…';
+        try {
+          await Cloud.signInWithEmail(email);
+          $('#gateMsg').textContent = `Pronto! Abra o link que chegou em ${email} neste mesmo aparelho e navegador (veja também o spam).`;
+        } catch (err) {
+          $('#gateMsg').textContent = `Não foi possível enviar: ${err.message}`;
+        }
+      });
       $('#btnGoogle').addEventListener('click', async () => {
         $('#gateMsg').textContent = 'Abrindo o Google…';
         try {
@@ -2526,6 +2690,8 @@
         return;
       }
       Cloud.registrarAcesso().catch(() => {}); // "Último acesso" em Conta → Quem tem acesso
+      lerFila();
+      if (fila.length) await enviarFila();
       db = await Cloud.loadAll();
       loadedAt = Date.now();
       offline = false;
@@ -2534,6 +2700,7 @@
       showApp();
       onRoute();
     } catch (err) {
+      lerFila();
       const c = readCache();
       if (c) {
         db = { ...emptyDb(), ...c.db };
@@ -2563,6 +2730,7 @@
       }
       papel = novoPapel;
       Cloud.registrarAcesso().catch(() => {});
+      if (fila.length) await enviarFila();
       db = await Cloud.loadAll();
       loadedAt = Date.now();
       offline = false;
@@ -2571,8 +2739,12 @@
       if (!dlg.open) render();
       if (!quiet) toast('Dados atualizados');
     } catch (err) {
-      if (quiet) throw err;
-      toast(errMsg(err).replace('Não foi possível salvar', 'Não foi possível atualizar'));
+      if (quiet && !semRede(err)) throw err;
+      if (semRede(err)) {
+        offline = true;
+        if (!dlg.open) render();
+      }
+      if (!quiet) toast(errMsg(err).replace('Não foi possível salvar', 'Não foi possível atualizar'));
     }
   }
 

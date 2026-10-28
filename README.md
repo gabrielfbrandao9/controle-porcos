@@ -5,7 +5,7 @@ Substitui a planilha **Porcos** do Google Drive (os dados dela foram importados)
 
 **Endereço:** <https://gabrielfbrandao9.github.io/controle-porcos/>
 
-Só entra quem recebeu acesso, com a conta Google. Cada pessoa pode **só ver** ou **ver e editar**;
+Só entra quem recebeu acesso, com a conta Google ou por um link de acesso que chega no e-mail. Cada pessoa pode **só ver** ou **ver e editar**;
 quem decide é o dono, na tela **Conta**. Veja [SUPABASE.md](SUPABASE.md).
 
 ## Telas
@@ -13,7 +13,7 @@ quem decide é o dono, na tela **Conta**. Veja [SUPABASE.md](SUPABASE.md).
 - **Início**: quantos animais há no plantel, próximo parto, leitões nascidos no ano, saldo, e avisos de
   vacinas atrasadas ou chegando e partos dos próximos 15 dias.
 - **Animais**: ficha de cada animal (foto, idade calculada sozinha, compra, venda, abate), com filtro
-  por situação (no plantel, vendidos, abatidos, mortos).
+  por situação (no plantel, vendidos, abatidos, mortos) e busca pelo nome, categoria, de quem comprou ou observação.
 - **Crias**: gestações de cada matriz, com o barrão (pai). O site avisa se o barrão for parente da matriz.
   Enquanto o dia do parto não for preenchido, ele fica previsto para 114 dias depois do cruzamento; depois do
   parto, registre vivos e mortos (o site mostra os nascidos, a soma dos dois), machos/fêmeas, capação e as
@@ -35,7 +35,11 @@ Idades, duração das gestações, próximas vacinas e totais são calculados pe
 
 Site estático (HTML, CSS e JavaScript, sem etapa de build) publicado pelo GitHub Pages, com os dados no
 Supabase. Pode ser instalado no celular como app ("Adicionar à tela inicial"). Sem internet, mostra os
-dados da última vez que abriu, só para consulta.
+dados da última vez que abriu e dá para continuar anotando: cada alteração fica numa fila no aparelho e vai
+para a nuvem, na ordem, assim que a conexão volta. Fotos, arquivos de bula e excluir animais ou gestações
+(que apagam junto o que está ligado a eles) precisam de internet.
+
+`privacidade.html` é a política de privacidade (link na entrada e em Conta).
 
 ```
 index.html            página e menu
