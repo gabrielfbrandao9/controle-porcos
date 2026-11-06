@@ -84,7 +84,6 @@
   let racaoModo = 'total';
   let racaoQtd = 100;
   let racaoIng = 'Milho';
-  let installPrompt = null;
   let toastTimer = null;
 
   const canEdit = () => papel === 'dono' || papel === 'editor';
@@ -982,7 +981,7 @@
             Sem internet, dá para continuar anotando: as alterações ficam neste aparelho e vão para a nuvem quando a conexão voltar.</p>
           <div class="btn-row">
             <button type="button" class="btn" data-act="reload">${ICON.refresh} Atualizar agora</button>
-            <button type="button" class="btn ghost" data-act="install" ${installPrompt ? '' : 'hidden'}>Instalar app</button>
+            <button type="button" class="btn ghost" data-app-apk="Atualizar app" hidden>Instalar app</button>
           </div>
         </section>
       </div>
@@ -2506,7 +2505,6 @@
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
     reload: () => reload(),
-    install: () => install(),
     'acesso-remover': async (el) => {
       const email = el.dataset.email;
       if (!confirm(`Tirar o acesso de ${email}?`)) return;
@@ -2616,6 +2614,7 @@
           <button type="submit" class="btn">Enviar link de acesso</button>
         </form>
         <p class="gate-msg" id="gateMsg"></p>
+        <button type="button" class="btn ghost" data-app-apk="Atualizar app" hidden>Instalar app</button>
         <p class="gate-priv"><a href="privacidade.html">Política de privacidade</a></p>`;
       $('#gateEmail').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -2824,31 +2823,10 @@
     if (current.name === 'conta') render();
   });
 
-  // ---------- App instalável ----------
-
-  async function install() {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    await installPrompt.userChoice.catch(() => null);
-    installPrompt = null;
-    $('#btnInstall').hidden = true;
-  }
-
   function bindApp() {
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
     }
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      installPrompt = e;
-      $('#btnInstall').hidden = false;
-    });
-    $('#btnInstall').addEventListener('click', install);
-    window.addEventListener('appinstalled', () => {
-      $('#btnInstall').hidden = true;
-      toast('App instalado! Procure “Porcos” na tela inicial.');
-    });
-
     // Ao voltar para o site, busca o que outras pessoas mudaram
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && user && papel && Date.now() - loadedAt > 60000 && !dlg.open) {

@@ -198,7 +198,6 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .nav a:hover { background: transparent; }
   .nav a svg { width: 22px; height: 22px; }
   .view { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
-  .install-btn { display: none; }
 }
 
 /* ---------- Páginas ---------- */

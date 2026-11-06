@@ -34,7 +34,7 @@ Idades, duração das gestações, próximas vacinas e totais são calculados pe
 ## Como funciona
 
 Site estático (HTML, CSS e JavaScript, sem etapa de build) publicado pelo GitHub Pages, com os dados no
-Supabase. Pode ser instalado no celular como app ("Adicionar à tela inicial"). Sem internet, mostra os
+Supabase. O botão **Instalar app** baixa o app para Android (`js/app-apk.js`); dentro do app, ele vira **Atualizar**. Sem internet, mostra os
 dados da última vez que abriu e dá para continuar anotando: cada alteração fica numa fila no aparelho e vai
 para a nuvem, na ordem, assim que a conexão volta. Fotos, arquivos de bula e excluir animais ou gestações
 (que apagam junto o que está ligado a eles) precisam de internet.
