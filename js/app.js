@@ -3107,7 +3107,8 @@
     if (authKnown && (u && u.id) === (antes && antes.id)) return; // renovação do login: nada mudou
     authKnown = true;
     user = u;
-    acessos = null;
+    membros = [];
+    convites = [];
     if (!u) {
       papel = null;
       db = emptyDb();
