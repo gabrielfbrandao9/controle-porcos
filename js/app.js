@@ -657,7 +657,8 @@
     const comDoses = saudeOpcoes.doses;
     const cal = calendario(todos);
     const produtos = produtosOrdenados();
-    const comReforco = produtos.filter((p) => p.intervalo_dias);
+    const produtoUsado = (id) => db.aplicacoes.some((x) => x.produto_id === id);
+    const comReforco = produtos.filter((p) => p.intervalo_dias && produtoUsado(p.id));
     // Aplicações de cada animal, contando as de quando era cria
     const apsAnimais = db.animais.flatMap((a) => aplicacoesAnimal(a.id));
 
@@ -677,12 +678,11 @@
     // Produtos sem "repetir a cada": uso esporádico, mostra as aplicações feitas nos animais.
     // Com "Mostrar doses aplicadas", uma linha por animal com todas as doses.
     const nenhuma = `<p class="muted">Nenhuma aplicação em ${todos ? 'animais' : 'animais do plantel'}. As das crias ficam em <a href="#/crias">Crias</a>.</p>`;
-    const esporadicoHtml = produtos.filter((p) => !p.intervalo_dias).map((p) => {
+    const esporadicoHtml = produtos.filter((p) => !p.intervalo_dias && produtoUsado(p.id)).map((p) => {
       const aps = sortByDate(apsAnimais.filter((x) => x.produto_id === p.id && apNoFiltro(x)), 'data', true);
       let corpo;
-      if (!aps.length) {
-        corpo = nenhuma;
-      } else if (comDoses) {
+      if (!aps.length) return '';
+      if (comDoses) {
         const grupos = new Map();
         [...aps].reverse().forEach((x) => {
           if (!grupos.has(x.animal_id)) grupos.set(x.animal_id, []);
@@ -750,7 +750,7 @@
       ${opcoesHtml}
       ${calHtml ? `<h2 class="group-title">Uso recorrente</h2>${calHtml}` : ''}
       ${esporadicoHtml ? `<h2 class="group-title">Uso esporádico</h2>${esporadicoHtml}` : ''}
-      ${!calHtml && !esporadicoHtml ? '<p class="muted">Nenhuma vacina ou remédio cadastrado.</p>' : ''}
+      ${!calHtml && !esporadicoHtml ? (produtos.length ? '<p class="muted">Nenhuma vacina ou remédio com aplicação registrada.</p>' : '<p class="muted">Nenhuma vacina ou remédio cadastrado.</p>') : ''}
       <div class="two-col">
         ${bloco('saude-historico', 'Últimas aplicações', histHtml)}
         <section class="section card"><h2>Vacinas e remédios</h2>${prodHtml}</section>
