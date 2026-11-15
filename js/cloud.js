@@ -1,8 +1,7 @@
 /*
  * Nuvem (Supabase): login com Google, leitura e gravação das tabelas "porcos_*",
  * fotos dos animais (bucket "porcos-fotos") e arquivos das bulas (bucket "porcos-bulas").
- * Quem pode ver ou editar é decidido no banco (tabela porcos_acesso + RLS):
- * o site só esconde os botões de quem não pode editar.
+ * Suporta modelo multi-inquilino com Grupos e Convites por Link.
  */
 (function (global) {
   'use strict';
@@ -29,10 +28,12 @@
     return res.data;
   }
 
-  async function selectAll(table) {
+  async function selectAll(table, grupoId) {
     const all = [];
     for (let from = 0; ; from += PAGE) {
-      const rows = check(await client.from(table).select('*').order('id').range(from, from + PAGE - 1));
+      let query = client.from(table).select('*');
+      if (grupoId) query = query.eq('grupo_id', grupoId);
+      const rows = check(await query.order('id').range(from, from + PAGE - 1));
       all.push(...rows);
       if (rows.length < PAGE) return all;
     }
@@ -40,6 +41,7 @@
 
   const Cloud = {
     TABLES,
+    client,
 
     onAuthChange(cb) {
       client.auth.onAuthStateChange((event, session) => cb(session ? session.user : null, event));
@@ -58,20 +60,69 @@
       check(await client.auth.signOut());
     },
 
-    // 'dono', 'editor', 'leitor' ou null (sem acesso)
-    async papel() {
-      return check(await client.rpc('porcos_papel'));
+    // ---------- Grupos e Inicialização ----------
+
+    // Garante que o usuário tem seu grupo inicial (ou devolve os grupos aos quais pertence)
+    async inicializarUsuario() {
+      return check(await client.rpc('porcos_inicializar_usuario'));
     },
 
-    // Todos os dados: { animais: [...], gestacoes: [...], ... }
-    async loadAll() {
+    async criarGrupo(nome) {
+      return check(await client.rpc('porcos_criar_grupo', { p_nome: nome }));
+    },
+
+    async renomearGrupo(grupoId, novoNome) {
+      return check(await client.rpc('porcos_renomear_grupo', { p_grupo_id: grupoId, p_novo_nome: novoNome }));
+    },
+
+    // ---------- Convites por Link ----------
+
+    async gerarConvite(grupoId, papel = 'editor') {
+      return check(await client.rpc('porcos_gerar_convite', { p_grupo_id: grupoId, p_papel: papel }));
+    },
+
+    async listarConvites(grupoId) {
+      return check(await client.rpc('porcos_listar_convites', { p_grupo_id: grupoId }));
+    },
+
+    async revogarConvite(codigo) {
+      return check(await client.rpc('porcos_revogar_convite', { p_codigo: codigo }));
+    },
+
+    async consultarConvite(codigo) {
+      return check(await client.rpc('porcos_consultar_convite', { p_codigo: codigo }));
+    },
+
+    async aceitarConvite(codigo) {
+      return check(await client.rpc('porcos_aceitar_convite', { p_codigo: codigo }));
+    },
+
+    // ---------- Membros do Grupo ----------
+
+    async listarMembros(grupoId) {
+      return check(await client.rpc('porcos_listar_membros', { p_grupo_id: grupoId }));
+    },
+
+    async alterarPapelMembro(grupoId, membroId, papel) {
+      return check(await client.rpc('porcos_alterar_papel_membro', { p_grupo_id: grupoId, p_membro_id: membroId, p_papel: papel }));
+    },
+
+    async removerMembro(grupoId, membroId) {
+      return check(await client.rpc('porcos_remover_membro', { p_grupo_id: grupoId, p_membro_id: membroId }));
+    },
+
+    // ---------- Dados do Grupo ----------
+
+    // Todos os dados do grupo: { animais: [...], gestacoes: [...], ... }
+    async loadAll(grupoId) {
       const keys = Object.keys(TABLES);
-      const lists = await Promise.all(keys.map((k) => selectAll(TABLES[k])));
+      const lists = await Promise.all(keys.map((k) => selectAll(TABLES[k], grupoId)));
       return Object.fromEntries(keys.map((k, i) => [k, lists[i]]));
     },
 
-    async insert(kind, rows) {
-      return check(await client.from(TABLES[kind]).insert(rows).select());
+    async insert(kind, rows, grupoId) {
+      const payload = grupoId ? rows.map((r) => ({ ...r, grupo_id: r.grupo_id || grupoId })) : rows;
+      return check(await client.from(TABLES[kind]).insert(payload).select());
     },
 
     async update(kind, id, patch) {
@@ -89,9 +140,10 @@
 
     // ---------- Restaurar cópia (em lotes) ----------
 
-    async upsertMany(kind, rows) {
-      for (let i = 0; i < rows.length; i += 500) {
-        check(await client.from(TABLES[kind]).upsert(rows.slice(i, i + 500)));
+    async upsertMany(kind, rows, grupoId) {
+      const payload = grupoId ? rows.map((r) => ({ ...r, grupo_id: r.grupo_id || grupoId })) : rows;
+      for (let i = 0; i < payload.length; i += 500) {
+        check(await client.from(TABLES[kind]).upsert(payload.slice(i, i + 500)));
       }
     },
 
@@ -109,30 +161,6 @@
 
     async uploadArquivo(bucket, path, blob, contentType) {
       check(await client.storage.from(bucket).upload(path, blob, { contentType, upsert: true }));
-    },
-
-    // ---------- Acesso (só o dono altera) ----------
-
-    // Com último acesso ao site e último login Google (a função só devolve algo para o dono)
-    async acessos() {
-      return check(await client.rpc('porcos_acessos'));
-    },
-
-    // Marca que quem está usando abriu o site agora
-    async registrarAcesso() {
-      check(await client.rpc('porcos_registrar_acesso'));
-    },
-
-    async addAcesso(row) {
-      return check(await client.from('porcos_acesso').insert(row).select().single());
-    },
-
-    async updateAcesso(email, patch) {
-      return check(await client.from('porcos_acesso').update(patch).eq('email', email).select().single());
-    },
-
-    async removeAcesso(email) {
-      check(await client.from('porcos_acesso').delete().eq('email', email));
     },
 
     // ---------- Fotos ----------

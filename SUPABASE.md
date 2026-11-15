@@ -1,63 +1,49 @@
 # Banco de dados (Supabase)
 
-O Controle de Porcos usa **o mesmo projeto Supabase do Otimizador de Cortes e dos Orçamentos**:
-o mesmo login com Google e a mesma chave, que já estão em [`js/config.js`](js/config.js).
-As tabelas dele começam com `porcos_` e não mexem nas dos outros sites.
+O Controle de Porcos usa o Supabase para login com Google, banco de dados PostgreSQL com regras de segurança (RLS) e armazenamento de fotos/bulas.
 
-O banco já foi criado e os dados da planilha **Porcos** já foram importados. Este arquivo serve
-para consulta ou para refazer tudo num projeto novo.
+O sistema opera no modelo **Multi-inquilino com Grupos e Convites por Link**:
+- Cada usuário que entra ganha automaticamente o seu próprio **Grupo** isolado com fórmulas de ração e vacinas pré-configuradas.
+- O dono do grupo pode gerar **links de convite** (para compartilhar no WhatsApp) para que familiares ou colaboradores acessem e editem os mesmos dados.
+- Quem tiver mais de um grupo pode alternar entre eles facilmente no aplicativo.
 
-## Endereço do site liberado no login
+## Como aplicar as atualizações no banco
 
-Em **Authentication** → **URL Configuration** → **Redirect URLs** estão (desde 19/10/2026):
+1. Abra o painel do seu projeto no **Supabase**.
+2. Vá em **SQL Editor** → **New query**.
+3. Copie todo o conteúdo do arquivo [`supabase/schema.sql`](supabase/schema.sql) e cole no editor.
+4. Clique em **Run**.
+   *(O script é seguro e idempotente: ele preserva todos os dados existentes, cria o primeiro grupo e associa os animais, crias e lançamentos a ele).*
 
+## Endereço do site liberado no login (Redirect URLs)
+
+Em **Authentication** → **URL Configuration** → **Redirect URLs**:
 - `https://gabrielfbrandao9.github.io/controle-porcos/**`
-- `http://localhost:8770/**`, para testar no computador.
+- `http://localhost:8770/**` (para testes locais)
 
-O **Site URL** continua sendo o do Otimizador. Sem esse endereço na lista, o Google devolveria a
-pessoa para o Otimizador depois do login.
+## Permissões no Grupo
 
-## Quem pode ver e editar
-
-Só entra quem está na tabela `porcos_acesso`. O banco confere o e-mail da conta Google em toda
-leitura e gravação (regras de segurança, RLS), então não adianta ter o endereço do site.
-
-| Permissão | Ver | Editar | Dar e tirar acesso |
-|-----------|-----|--------|--------------------|
-| Dono      | sim | sim    | sim                |
-| Pode editar | sim | sim  | não                |
-| Só ver    | sim | não    | não                |
-
-O dono libera as pessoas no site, em **Conta** (toque na sua foto no canto de cima):
-digita o e-mail Google da pessoa, escolhe a permissão e toca em **Dar acesso**. Não chega
-e-mail nenhum: o botão **Avisar** abre o WhatsApp com o link. Quem entrar sem estar na lista
-vê a mensagem "ainda não tem acesso".
+| Permissão | Ver | Editar | Convidar / Gerenciar Membros |
+|-----------|-----|--------|------------------------------|
+| Dono | sim | sim | sim |
+| Pode editar | sim | sim | não |
+| Só ver | sim | não | não |
 
 ## Tabelas
 
 | Tabela | O que guarda |
 |--------|--------------|
-| `porcos_animais` | Cada animal: categoria, nascimento, chegada, compra, saída (venda, abate ou morte), foto |
-| `porcos_gestacoes` | Cruzamento, parto (em branco = previsão de 114 dias), vivos, mortos, machos/fêmeas e capação de cada matriz |
-| `porcos_produtos` | Vacinas e remédios e de quantos em quantos dias repetir |
-| `porcos_aplicacoes` | Cada aplicação, num animal ou nas crias de uma gestação |
-| `porcos_abates` | Carne, toucinho e valor de cada abate |
-| `porcos_lancamentos` | Gastos (soro, ração, outras) e receitas |
-| `porcos_racoes` | Fórmula de ração de cada fase (% de cada ingrediente) |
-| `porcos_acesso` | Quem pode entrar e com qual permissão |
+| `porcos_grupos` | Criações/grupos independentes (nome, data de criação, dono) |
+| `porcos_membros` | Membros de cada grupo, seus papéis (`dono`, `editor`, `leitor`) e último acesso |
+| `porcos_convites` | Códigos de convites por link ativos para novos membros |
+| `porcos_animais` | Plantel de cada grupo (`grupo_id`) |
+| `porcos_gestacoes` | Gestações e crias de cada matriz no grupo (`grupo_id`) |
+| `porcos_produtos` | Vacinas e remédios cadastrados no grupo (`grupo_id`) |
+| `porcos_aplicacoes` | Aplicações de vacinas/medicamentos no grupo (`grupo_id`) |
+| `porcos_abates` | Registros de abate no grupo (`grupo_id`) |
+| `porcos_lancamentos` | Gastos e receitas no grupo (`grupo_id`) |
+| `porcos_racoes` | Fórmulas de ração por fase no grupo (`grupo_id`) |
 
-As fotos ficam no Storage, no bucket `porcos-fotos` (privado; até 5 MB cada, o site reduz antes de enviar).
-Cada tabela guarda quando e por quem foi a última alteração (`atualizado_em`, `atualizado_por`).
-
-## Projeto novo do zero
-
-1. **SQL Editor** → **New query**, cole [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**
-   (antes, siga a instrução do arquivo para cadastrar o e-mail do dono).
-2. Ative o login com Google em **Authentication** → **Sign In / Providers**.
-3. Coloque a URL e a chave *publishable* do projeto em `js/config.js`.
-
-## Bom saber
-
-- **Projeto pausado**: no plano gratuito, o Supabase pausa o projeto depois de 1 semana sem acesso
-  a nenhum dos sites. Se acontecer, entre no painel e clique em **Restore**. Os dados não se perdem.
-- **Ver os dados**: **Table Editor** → tabelas `porcos_*`.
+Storage:
+- Bucket `porcos-fotos`: fotos dos animais (privado, até 5 MB).
+- Bucket `porcos-bulas`: bulas em PDF ou imagem (privado, até 20 MB).

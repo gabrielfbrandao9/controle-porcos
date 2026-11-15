@@ -445,6 +445,20 @@ button.dose:hover { border-color: var(--accent); }
 @media (max-width: 760px) { .acesso-form { grid-template-columns: 1fr 1fr; } .acesso-form .field:first-child { grid-column: 1 / -1; } .acesso-form .btn { grid-column: 1 / -1; } }
 @media (max-width: 560px) { .acesso-row { flex-wrap: wrap; } .acesso-row .right { width: 100%; justify-content: flex-start; } }
 
+.grupo-btn { max-width: 170px; border-color: var(--line-strong); background: var(--surface); }
+.grupo-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 600px) { .grupo-btn { max-width: 120px; } }
+
+.grupo-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.convites-lista { display: grid; gap: 10px; margin-top: 10px; }
+.convite-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px dashed var(--line-strong); border-radius: 12px; background: var(--surface-2);
+}
+.convite-info { display: flex; flex-direction: column; gap: 2px; }
+.convite-code { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+.convite-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
 /* ---------- Formulários ---------- */
 
 dialog {

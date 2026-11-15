@@ -74,6 +74,10 @@
 
   let user = null;
   let papel = null;
+  let grupos = [];
+  let grupoAtivo = null;
+  let membros = [];
+  let convites = [];
   let db = emptyDb();
   let fotoUrl = {};
   let bulaUrl = {};
@@ -241,7 +245,7 @@
     };
     view.innerHTML = banners() + (pages[current.name] || renderInicio)();
     if (current.name === 'animais') filtrarAnimais();
-    if (current.name === 'conta' && papel === 'dono') loadAcessos();
+    if (current.name === 'conta') loadMembrosEConvites();
   }
 
   function banners() {
@@ -940,9 +944,7 @@
       <p class="muted small">Valor e preço médio só contam as partes lançadas com preço. Abates antigos têm só o valor total.</p>`, { sub: true });
   }
 
-  // ---------- Conta e acesso ----------
-
-  let acessos = null;
+  // ---------- Conta, Grupos e Convites ----------
 
   function renderConta() {
     const email = (user && user.email) || '';
@@ -950,19 +952,35 @@
     const nome = (user && user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || '';
     const tema = (v, label) => `<button type="button" class="${themeChoice === v ? 'on' : ''}" data-act="theme" data-value="${v}">${label}</button>`;
     const quando = loadedAt ? new Date(loadedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+    const isDono = papel === 'dono';
 
-    const acessoHtml = papel === 'dono' ? `<section class="section card">
-        <h2>Quem tem acesso</h2>
-        <p class="muted">A pessoa entra em <strong>${esc(siteUrl())}</strong> com a conta Google do e-mail cadastrado aqui
-          (ou pelo link de acesso que ela pede na tela de entrar). Avise pelo botão <strong>Avisar</strong>.</p>
-        <div id="acessoLista">${acessoListaHtml()}</div>
-        <form class="acesso-form" id="acessoForm" autocomplete="off">
-          <label class="field"><span>E-mail</span><input name="email" type="email" required placeholder="nome@gmail.com"></label>
-          <label class="field"><span>Nome</span><input name="nome" placeholder="Opcional"></label>
-          <label class="field"><span>Permissão</span><select name="papel"><option value="leitor">Só ver</option><option value="editor">Pode editar</option></select></label>
-          <button class="btn primary">${ICON.plus} Dar acesso</button>
-        </form>
-      </section>` : '';
+    const grupoHtml = `<section class="section card">
+        <div class="grupo-card-head">
+          <div>
+            <h2>Grupo: <strong>${esc((grupoAtivo && grupoAtivo.nome) || 'Meu Grupo')}</strong></h2>
+            <small class="muted">Sua função neste grupo: <strong>${esc(PAPEIS[papel] || papel)}</strong></small>
+          </div>
+          <div class="btn-row">
+            ${isDono ? `<button type="button" class="btn small" data-act="grupo-renomear">${ICON.edit} Renomear grupo</button>` : ''}
+            <button type="button" class="btn small" data-act="grupo-trocar">Alternar / Novo grupo (${grupos.length})</button>
+          </div>
+        </div>
+
+        ${isDono ? `
+          <div class="bloco-head" style="margin-top: 20px;">
+            <h3>Convite por Link (WhatsApp)</h3>
+            <p class="muted">Gere um link para compartilhar. Quem clicar entra direto neste grupo com sua conta Google.</p>
+            <button type="button" class="btn primary small" data-act="convite-novo">${ICON.plus} Gerar link de convite</button>
+          </div>
+          <div id="convitesLista" class="convites-lista">${convitesListaHtml()}</div>
+        ` : ''}
+
+        <div class="bloco-head" style="margin-top: 24px;">
+          <h3>Membros do Grupo</h3>
+          <p class="muted">Pessoas que têm acesso a este grupo de criação.</p>
+        </div>
+        <div id="membrosLista">${membrosListaHtml()}</div>
+      </section>`;
 
     return `${pageHead('Conta')}
       <section class="section card account-card">
@@ -971,7 +989,7 @@
           <span class="badge ${papel === 'leitor' ? 'muted' : 'ok'}">${esc(PAPEIS[papel] || '')}</span></div>
         <button type="button" class="btn" data-act="logout">Sair</button>
       </section>
-      ${acessoHtml}
+      ${grupoHtml}
       <div class="two-col">
         <section class="section card"><h2>Aparência</h2>
           <div class="seg" role="group" aria-label="Tema">${tema('auto', 'Automático')}${tema('light', 'Claro')}${tema('dark', 'Escuro')}</div>
@@ -1002,7 +1020,7 @@
         </div>
         ${papel === 'dono' ? `<div class="restaurar">
           <h3>Restaurar cópia</h3>
-          <p class="muted">Escolha uma cópia completa (.zip) ou um JSON baixados daqui. Os dados atuais são substituídos
+          <p class="muted">Escolha uma cópia completa (.zip) ou um JSON baixados daqui. Os dados atuais deste grupo são substituídos
             pelos da cópia; antes, o site baixa uma cópia dos dados atuais. Só o dono vê esta opção.</p>
           <button type="button" class="btn danger-ghost restaurar-btn" data-act="restaurar">${ICON.refresh} Restaurar cópia…</button>
         </div>` : ''}
@@ -1015,6 +1033,7 @@
 
   // Data e hora no fuso do aparelho: "hoje às 14:32", "ontem às 07:01", "16/10/2026 às 07:01"
   function fmtQuando(ts) {
+    if (!ts) return '';
     const d = new Date(ts);
     const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const dias = diffDays(U.iso(d), hoje());
@@ -1023,38 +1042,234 @@
     return `${d.toLocaleDateString('pt-BR')} às ${hora} (há ${dias} dias)`;
   }
 
-  function acessoListaHtml() {
-    if (!Array.isArray(acessos)) return '<p class="muted">Carregando…</p>';
-    return `<ul class="list">${acessos.map((x) => `<li class="list-row acesso-row">
-        <span><strong>${esc(x.nome || x.email)}</strong>${x.nome ? `<small>${esc(x.email)}</small>` : ''}
+  function convitesListaHtml() {
+    if (!Array.isArray(convites) || !convites.length) return '<p class="muted small" style="margin-top: 6px;">Nenhum link de convite ativo no momento.</p>';
+    return convites.map((c) => {
+      const link = `${siteUrl()}?convite=${c.codigo}`;
+      const whats = `https://wa.me/?text=${encodeURIComponent(`Convite para participar do grupo "${grupoAtivo ? grupoAtivo.nome : 'Porcos'}" no Controle de Porcos (${c.papel === 'editor' ? 'pode ver e editar' : 'só para ver'}): ${link}`)}`;
+      return `
+        <div class="convite-item">
+          <div class="convite-info">
+            <span>Permissão: <span class="badge ${c.papel === 'editor' ? 'ok' : 'muted'}">${c.papel === 'editor' ? 'Pode editar' : 'Só ver'}</span></span>
+            <span class="convite-code">${esc(link)}</span>
+            <small class="muted">Criado ${esc(fmtQuando(c.criado_em))}</small>
+          </div>
+          <div class="convite-actions">
+            <button type="button" class="btn small" data-act="convite-copiar" data-link="${esc(link)}">Copiar link</button>
+            <a class="btn small ghost" href="${esc(whats)}" target="_blank" rel="noopener">WhatsApp</a>
+            <button type="button" class="btn small danger-ghost" data-act="convite-revogar" data-codigo="${esc(c.codigo)}">Excluir</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function membrosListaHtml() {
+    if (!Array.isArray(membros)) return '<p class="muted">Carregando membros…</p>';
+    if (!membros.length) return '<p class="muted">Nenhum membro listado.</p>';
+    return `<ul class="list">${membros.map((x) => `<li class="list-row acesso-row">
+        <span><strong>${esc(x.nome || x.email || 'Membro')}</strong>${x.nome && x.email ? `<small>${esc(x.email)}</small>` : ''}
           <small class="ultimo-acesso${x.ultimo_acesso ? '' : ' nunca'}">${x.ultimo_acesso
             ? `Último acesso: ${esc(fmtQuando(x.ultimo_acesso))}`
             : 'Ainda não abriu o site'}</small></span>
-        <span class="right">${x.papel === 'dono' ? '<span class="badge ok">Dono</span>' : `
-          <select data-act-change="acesso-papel" data-email="${esc(x.email)}" aria-label="Permissão de ${esc(x.email)}">
-            <option value="leitor"${x.papel === 'leitor' ? ' selected' : ''}>Só ver</option>
-            <option value="editor"${x.papel === 'editor' ? ' selected' : ''}>Pode editar</option>
-          </select>
-          <a class="btn small ghost" href="${esc(whatsLink(x))}" target="_blank" rel="noopener">Avisar</a>
-          <button type="button" class="btn small danger-ghost" data-act="acesso-remover" data-email="${esc(x.email)}">Remover</button>`}</span>
+        <span class="right">
+          ${x.papel === 'dono' ? '<span class="badge ok">Dono</span>' : (papel === 'dono' ? `
+            <select data-act-change="membro-papel" data-id="${esc(x.id)}" aria-label="Permissão de ${esc(x.email || x.nome)}">
+              <option value="leitor"${x.papel === 'leitor' ? ' selected' : ''}>Só ver</option>
+              <option value="editor"${x.papel === 'editor' ? ' selected' : ''}>Pode editar</option>
+            </select>
+            <button type="button" class="btn small danger-ghost" data-act="membro-remover" data-id="${esc(x.id)}" data-nome="${esc(x.nome || x.email)}">Remover</button>
+          ` : `<span class="badge ${x.papel === 'editor' ? 'ok' : 'muted'}">${esc(PAPEIS[x.papel] || x.papel)}</span>`)}
+          ${x.is_current_user && x.papel !== 'dono' ? `<button type="button" class="btn small danger-ghost" data-act="membro-sair" data-id="${esc(x.id)}">Sair do grupo</button>` : ''}
+        </span>
       </li>`).join('')}</ul>`;
   }
 
-  function whatsLink(x) {
-    const txt = `Liberei para você o Controle de Porcos (${x.papel === 'editor' ? 'pode ver e editar' : 'só para ver'}). Abra ${siteUrl()} e entre com ${x.email} (pela conta Google ou pelo link que chega no e-mail).`;
-    return `https://wa.me/?text=${encodeURIComponent(txt)}`;
+  async function loadMembrosEConvites() {
+    if (!grupoAtivo) return;
+    try {
+      membros = await Cloud.listarMembros(grupoAtivo.id);
+    } catch (err) {
+      membros = [];
+    }
+    const mb = $('#membrosLista');
+    if (mb) mb.innerHTML = membrosListaHtml();
+
+    if (papel === 'dono') {
+      try {
+        convites = await Cloud.listarConvites(grupoAtivo.id);
+      } catch (err) {
+        convites = [];
+      }
+      const cb = $('#convitesLista');
+      if (cb) cb.innerHTML = convitesListaHtml();
+    }
   }
 
-  async function loadAcessos() {
-    try {
-      const lista = await Cloud.acessos();
-      acessos = Array.isArray(lista) ? lista : [];
-    } catch (err) {
-      acessos = [];
-      toast(errMsg(err));
+  function atualizarBtnGrupo() {
+    const btn = $('#btnGrupo');
+    const nomeEl = $('#grupoNome');
+    if (!btn || !nomeEl) return;
+    if (grupoAtivo) {
+      btn.hidden = false;
+      nomeEl.textContent = grupoAtivo.nome;
+      btn.title = `Grupo: ${grupoAtivo.nome} (${PAPEIS[papel] || papel}). Clique para alternar.`;
+    } else {
+      btn.hidden = true;
     }
-    const box = $('#acessoLista');
-    if (box) box.innerHTML = acessoListaHtml();
+  }
+
+  function dialogGrupos() {
+    openForm({
+      title: 'Meus Grupos',
+      intro: 'Você pode alternar entre seus grupos ou criar uma nova criação independente.',
+      values: {},
+      fields: [],
+      submitLabel: 'Fechar',
+      onSave: async () => {},
+    });
+
+    const listaHtml = `
+      <div style="display: grid; gap: 8px; margin: 12px 0;">
+        ${grupos.map((g) => `
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: ${g.id === (grupoAtivo && grupoAtivo.id) ? 'var(--accent-soft)' : 'var(--surface)'};">
+            <div>
+              <strong>${esc(g.nome)}</strong> ${g.id === (grupoAtivo && grupoAtivo.id) ? '<span class="badge ok">Ativo</span>' : ''}
+              <small class="muted block">${esc(PAPEIS[g.papel] || g.papel)}</small>
+            </div>
+            ${g.id !== (grupoAtivo && grupoAtivo.id) ? `<button type="button" class="btn small" data-trocar-grupo-id="${esc(g.id)}">Usar este</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <button type="button" class="btn primary" id="btnNovoGrupoModal" style="width: 100%; margin-top: 6px;">${ICON.plus} Criar novo grupo</button>
+    `;
+
+    $('.fields', form).innerHTML = listaHtml;
+    $('#btnNovoGrupoModal', form).onclick = () => {
+      dlg.close();
+      formNovoGrupo();
+    };
+    $$('[data-trocar-grupo-id]', form).forEach((btn) => {
+      btn.onclick = async () => {
+        const novoId = btn.dataset.trocarGrupoId;
+        dlg.close();
+        await trocarGrupo(novoId);
+      };
+    });
+  }
+
+  function formNovoGrupo() {
+    openForm({
+      title: 'Criar Novo Grupo',
+      intro: 'O novo grupo terá seus próprios animais, finanças e membros separados.',
+      values: { nome: '' },
+      fields: [
+        { name: 'nome', label: 'Nome do Grupo', required: true, placeholder: 'Ex.: Criação 2, Granja Esperança' }
+      ],
+      submitLabel: 'Criar Grupo',
+      onSave: async (v) => {
+        const novo = await Cloud.criarGrupo(v.nome);
+        toast(`Grupo "${v.nome}" criado!`);
+        grupos.push(novo);
+        await trocarGrupo(novo.id);
+      }
+    });
+  }
+
+  function formRenomearGrupo() {
+    if (!grupoAtivo || papel !== 'dono') return;
+    openForm({
+      title: 'Renomear Grupo',
+      values: { nome: grupoAtivo.nome },
+      fields: [
+        { name: 'nome', label: 'Nome do Grupo', required: true }
+      ],
+      submitLabel: 'Salvar Nome',
+      onSave: async (v) => {
+        await Cloud.renomearGrupo(grupoAtivo.id, v.nome);
+        grupoAtivo.nome = v.nome;
+        const g = grupos.find((x) => x.id === grupoAtivo.id);
+        if (g) g.nome = v.nome;
+        atualizarBtnGrupo();
+        render();
+        toast('Nome do grupo atualizado!');
+      }
+    });
+  }
+
+  async function trocarGrupo(novoId) {
+    const escolhido = grupos.find((g) => g.id === novoId);
+    if (!escolhido) return;
+    try {
+      localStorage.setItem('porcos:grupo_ativo', novoId);
+    } catch (e) {}
+    grupoAtivo = escolhido;
+    papel = grupoAtivo.papel;
+    atualizarBtnGrupo();
+    db = emptyDb();
+    fotoUrl = {};
+    bulaUrl = {};
+    showGate('loading');
+    try {
+      lerFila();
+      if (fila.length) await enviarFila();
+      db = await Cloud.loadAll(grupoAtivo.id);
+      loadedAt = Date.now();
+      offline = false;
+      await refreshFotos();
+      saveCache();
+      showApp();
+      onRoute();
+      toast(`Você está no grupo "${grupoAtivo.nome}"`);
+    } catch (err) {
+      showGate('error', err && err.message);
+    }
+  }
+
+  function formGerarConvite() {
+    openForm({
+      title: 'Gerar Link de Convite',
+      intro: 'Qualquer pessoa que acessar este link e fizer login com o Google entrará para este grupo.',
+      values: { papel: 'editor' },
+      fields: [
+        {
+          name: 'papel', label: 'Permissão para quem entrar', type: 'select',
+          options: [['editor', 'Pode editar (animais, vacinas, gastos)'], ['leitor', 'Só ver (apenas visualização)']]
+        }
+      ],
+      submitLabel: 'Gerar Link',
+      onSave: async (v) => {
+        const codigo = await Cloud.gerarConvite(grupoAtivo.id, v.papel);
+        const link = `${siteUrl()}?convite=${codigo}`;
+        toast('Link de convite gerado!');
+        await loadMembrosEConvites();
+        setTimeout(() => dialogLinkGerado(link, v.papel), 300);
+      }
+    });
+  }
+
+  function dialogLinkGerado(link, papelConvite) {
+    const whats = `https://wa.me/?text=${encodeURIComponent(`Convite para participar do grupo "${grupoAtivo ? grupoAtivo.nome : 'Porcos'}" no Controle de Porcos (${papelConvite === 'editor' ? 'pode ver e editar' : 'só para ver'}): ${link}`)}`;
+    openForm({
+      title: 'Link de Convite Gerado',
+      intro: 'Envie o link abaixo para as pessoas que você quer convidar:',
+      values: {},
+      fields: [],
+      submitLabel: 'Fechar',
+      onSave: async () => {},
+    });
+    $('.fields', form).innerHTML = `
+      <div style="display: grid; gap: 12px; margin: 12px 0;">
+        <input readonly value="${esc(link)}" style="font-family: var(--mono); font-size: 0.88rem;" id="linkGeradoInput" onclick="this.select()">
+        <div class="btn-row">
+          <button type="button" class="btn primary" id="btnCopiarLinkGerado">${ICON.ok} Copiar link</button>
+          <a class="btn" href="${esc(whats)}" target="_blank" rel="noopener">Enviar no WhatsApp</a>
+        </div>
+      </div>
+    `;
+    $('#btnCopiarLinkGerado', form).onclick = () => {
+      navigator.clipboard.writeText(link).then(() => toast('Link copiado para a área de transferência!'));
+    };
   }
 
   // ---------- Formulários ----------
@@ -1218,7 +1433,7 @@
   // Cada gravação tenta ir direto para o banco. Sem internet, ela é feita aqui (no aparelho)
   // e entra numa fila, enviada na ordem assim que a conexão volta.
 
-  const filaKey = () => `porcos:fila:${user.id}`;
+  const filaKey = () => `porcos:fila:${user.id}:${grupoAtivo ? grupoAtivo.id : 'padrao'}`;
   let fila = [];
   let enviando = null;
 
@@ -1256,7 +1471,7 @@
           while (fila.length) {
             const o = fila[0];
             try {
-              if (o.op === 'insert') await Cloud.upsertMany(o.kind, [o.row]);
+              if (o.op === 'insert') await Cloud.upsertMany(o.kind, [o.row], grupoAtivo ? grupoAtivo.id : null);
               else if (o.op === 'update') await Cloud.updateSeExistir(o.kind, o.id, o.row);
               else await Cloud.remove(o.kind, o.id);
               enviadas++;
@@ -1296,7 +1511,8 @@
           db[kind] = db[kind].map((x) => (x.id === id ? r : x));
           return r;
         }
-        const [r] = await Cloud.insert(kind, [row]);
+        const rowComGrupo = grupoAtivo ? { ...row, grupo_id: grupoAtivo.id } : row;
+        const [r] = await Cloud.insert(kind, [rowComGrupo], grupoAtivo ? grupoAtivo.id : null);
         db[kind].push(r);
         return r;
       } catch (err) {
@@ -1310,16 +1526,17 @@
       naFila({ op: 'update', kind, id, row });
       return r;
     }
-    const r = { ...row, id: novoId(), criado_em: agora, atualizado_em: agora };
+    const r = { ...row, id: novoId(), grupo_id: grupoAtivo ? grupoAtivo.id : null, criado_em: agora, atualizado_em: agora };
     db[kind].push(r);
-    naFila({ op: 'insert', kind, id: r.id, row: { ...row, id: r.id } });
+    naFila({ op: 'insert', kind, id: r.id, row: r });
     return r;
   }
 
   async function saveMany(kind, rows) {
+    const rowsComGrupo = grupoAtivo ? rows.map((r) => ({ ...r, grupo_id: r.grupo_id || grupoAtivo.id })) : rows;
     if (await online()) {
       try {
-        const list = await Cloud.insert(kind, rows);
+        const list = await Cloud.insert(kind, rowsComGrupo, grupoAtivo ? grupoAtivo.id : null);
         db[kind].push(...list);
         return list;
       } catch (err) {
@@ -1327,7 +1544,7 @@
       }
     }
     const list = [];
-    for (const row of rows) list.push(await save(kind, null, row));
+    for (const row of rowsComGrupo) list.push(await save(kind, null, row));
     return list;
   }
 
@@ -2505,14 +2722,55 @@
     theme: (el) => { setTheme(el.dataset.value); render(); },
     logout: () => logout(),
     reload: () => reload(),
-    'acesso-remover': async (el) => {
-      const email = el.dataset.email;
-      if (!confirm(`Tirar o acesso de ${email}?`)) return;
+    'grupo-trocar': () => dialogGrupos(),
+    'grupo-renomear': () => formRenomearGrupo(),
+    'grupo-novo': () => formNovoGrupo(),
+    'convite-novo': () => formGerarConvite(),
+    'convite-copiar': (el) => {
+      const link = el.dataset.link;
+      if (link && navigator.clipboard) {
+        navigator.clipboard.writeText(link).then(() => toast('Link copiado!'));
+      }
+    },
+    'convite-revogar': async (el) => {
+      const codigo = el.dataset.codigo;
+      if (!confirm('Desativar este link de convite?')) return;
       try {
-        await Cloud.removeAcesso(email);
-        acessos = acessos.filter((x) => x.email !== email);
-        $('#acessoLista').innerHTML = acessoListaHtml();
-        toast('Acesso removido');
+        await Cloud.revogarConvite(codigo);
+        convites = convites.filter((c) => c.codigo !== codigo);
+        const cb = $('#convitesLista');
+        if (cb) cb.innerHTML = convitesListaHtml();
+        toast('Convite desativado');
+      } catch (err) {
+        toast(errMsg(err));
+      }
+    },
+    'membro-remover': async (el) => {
+      const id = el.dataset.id;
+      const nome = el.dataset.nome || 'este membro';
+      if (!confirm(`Remover ${nome} do grupo?`)) return;
+      try {
+        await Cloud.removerMembro(grupoAtivo.id, id);
+        membros = membros.filter((m) => m.id !== id);
+        const mb = $('#membrosLista');
+        if (mb) mb.innerHTML = membrosListaHtml();
+        toast('Membro removido');
+      } catch (err) {
+        toast(errMsg(err));
+      }
+    },
+    'membro-sair': async (el) => {
+      const id = el.dataset.id;
+      if (!confirm(`Tem certeza que deseja sair do grupo "${grupoAtivo ? grupoAtivo.nome : 'Porcos'}"?`)) return;
+      try {
+        await Cloud.removerMembro(grupoAtivo.id, id);
+        toast(`Você saiu do grupo "${grupoAtivo ? grupoAtivo.nome : ''}"`);
+        grupos = grupos.filter((g) => g.id !== (grupoAtivo && grupoAtivo.id));
+        if (grupos.length) {
+          await trocarGrupo(grupos[0].id);
+        } else {
+          await start();
+        }
       } catch (err) {
         toast(errMsg(err));
       }
@@ -2542,15 +2800,16 @@
       setSaude('doses', e.target.checked);
       return;
     }
-    const el = e.target.closest('[data-act-change="acesso-papel"]');
-    if (!el) return;
-    try {
-      const r = await Cloud.updateAcesso(el.dataset.email, { papel: el.value });
-      acessos = acessos.map((x) => (x.email === r.email ? { ...x, ...r } : x)); // mantém o último acesso
-      toast('Permissão alterada');
-    } catch (err) {
-      toast(errMsg(err));
-      loadAcessos();
+    const elMembro = e.target.closest('[data-act-change="membro-papel"]');
+    if (elMembro) {
+      try {
+        await Cloud.alterarPapelMembro(grupoAtivo.id, elMembro.dataset.id, elMembro.value);
+        toast('Permissão alterada');
+      } catch (err) {
+        toast(errMsg(err));
+        loadMembrosEConvites();
+      }
+      return;
     }
   });
 
@@ -2570,26 +2829,7 @@
     $('#racaoGrid').innerHTML = $('#racaoGrid', tmp).innerHTML;
   });
 
-  view.addEventListener('submit', async (e) => {
-    if (e.target.id !== 'acessoForm') return;
-    e.preventDefault();
-    const f = e.target;
-    const email = f.email.value.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(email)) return toast('Digite um e-mail válido.');
-    const btn = $('button', f);
-    btn.disabled = true;
-    try {
-      const r = await Cloud.addAcesso({ email, nome: f.nome.value.trim(), papel: f.papel.value });
-      acessos.push(r);
-      f.reset();
-      $('#acessoLista').innerHTML = acessoListaHtml();
-      toast(`Acesso liberado para ${email}`);
-    } catch (err) {
-      toast(err && err.code === '23505' ? 'Este e-mail já tem acesso.' : errMsg(err));
-    } finally {
-      btn.disabled = false;
-    }
-  });
+
 
   function toast(msg, ms = 3000) {
     const t = $('#toast');
@@ -2601,12 +2841,92 @@
 
   // ---------- Entrada, login e carregamento ----------
 
+  // ---------- Entrada, login e carregamento ----------
+
+  function confirmDialog({ title, message, confirmLabel = 'Confirmar', cancelLabel = 'Cancelar' }) {
+    return new Promise((resolve) => {
+      formState = { fields: [] };
+      form.innerHTML = `
+        <div class="dlg-head"><h2>${esc(title)}</h2><button type="button" class="icon" data-close aria-label="Fechar">×</button></div>
+        <div class="dlg-text" style="margin: 14px 0 18px; line-height: 1.5;">${message.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>
+        <div class="dlg-actions">
+          <button type="button" class="btn" data-cancel>${esc(cancelLabel)}</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn primary" data-confirm>${esc(confirmLabel)}</button>
+        </div>`;
+      const onConfirm = () => { dlg.close(); resolve(true); };
+      const onCancel = () => { dlg.close(); resolve(false); };
+      form.querySelector('[data-confirm]').onclick = onConfirm;
+      form.querySelector('[data-cancel]').onclick = onCancel;
+      form.querySelector('[data-close]').onclick = onCancel;
+      dlg.addEventListener('close', () => resolve(false), { once: true });
+      dlg.showModal();
+    });
+  }
+
+  function verificarParametrosConvite() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      let codigo = urlParams.get('convite') || urlParams.get('codigo');
+      if (!codigo && window.location.hash.includes('convite')) {
+        const hashQuery = window.location.hash.split('?')[1];
+        if (hashQuery) {
+          const hp = new URLSearchParams(hashQuery);
+          codigo = hp.get('codigo') || hp.get('convite');
+        }
+      }
+      if (codigo) {
+        sessionStorage.setItem('porcos:convite_pendente', codigo.trim().toLowerCase());
+        const cleanUrl = window.location.pathname + window.location.hash.replace(/\?.*$/, '');
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch (e) {}
+  }
+
+  async function processarConvitePendente() {
+    let codigo = null;
+    try { codigo = sessionStorage.getItem('porcos:convite_pendente'); } catch (e) {}
+    if (!codigo) return;
+
+    try {
+      const info = await Cloud.consultarConvite(codigo);
+      if (!info) {
+        sessionStorage.removeItem('porcos:convite_pendente');
+        toast('Este link de convite é inválido ou já expirou.', 5000);
+        return;
+      }
+      const aceitar = await confirmDialog({
+        title: 'Convite para Grupo',
+        message: `Você foi convidado para participar do grupo **${esc(info.grupo_nome)}** com acesso **${esc(PAPEIS[info.papel] || info.papel)}**.\n\nDeseja entrar neste grupo agora?`,
+        confirmLabel: 'Entrar no Grupo',
+        cancelLabel: 'Agora não',
+      });
+      if (aceitar) {
+        const r = await Cloud.aceitarConvite(codigo);
+        sessionStorage.removeItem('porcos:convite_pendente');
+        try { localStorage.setItem('porcos:grupo_ativo', r.grupo_id); } catch (e) {}
+        toast(`Bem-vindo ao grupo ${r.grupo_nome}!`);
+      } else {
+        sessionStorage.removeItem('porcos:convite_pendente');
+      }
+    } catch (err) {
+      sessionStorage.removeItem('porcos:convite_pendente');
+      toast(`Erro ao processar convite: ${err.message}`);
+    }
+  }
+
   function showGate(kind, extra) {
     $('#app').hidden = true;
     $('#gate').hidden = false;
     const body = $('#gateBody');
     if (kind === 'login') {
-      body.innerHTML = `<p class="muted">Entre com o e-mail que recebeu acesso.</p>
+      let pendenteMsg = '';
+      try {
+        if (sessionStorage.getItem('porcos:convite_pendente')) {
+          pendenteMsg = '<div class="banner ok" style="margin-bottom: 14px; text-align: left;"><p><strong>Convite recebido!</strong> Faça login para entrar no grupo compartilhado.</p></div>';
+        }
+      } catch (e) {}
+      body.innerHTML = `${pendenteMsg}<p class="muted">Entre com sua conta Google para acessar ou criar sua granja.</p>
         <button type="button" class="btn google" id="btnGoogle">${ICON.google} Entrar com Google</button>
         <form class="gate-email" id="gateEmail" autocomplete="on">
           <p class="gate-sep"><span>ou receba um link por e-mail</span></p>
@@ -2636,8 +2956,7 @@
         }
       });
     } else if (kind === 'noaccess') {
-      body.innerHTML = `<p>A conta <strong>${esc(user.email)}</strong> ainda não tem acesso.</p>
-        <p class="muted">Peça para ${esc(CFG.donoNome || 'o dono')} liberar este e-mail e depois toque em “Tentar de novo”.</p>
+      body.innerHTML = `<p>A conta <strong>${esc(user.email)}</strong> ainda não tem nenhum grupo.</p>
         <div class="gate-actions"><button type="button" class="btn primary" id="gateRetry">Tentar de novo</button>
         <button type="button" class="btn" id="gateOut">Usar outra conta</button></div>`;
       $('#gateRetry').addEventListener('click', start);
@@ -2658,11 +2977,11 @@
     $('#app').hidden = false;
   }
 
-  const cacheKey = () => `porcos:cache:${user.id}`;
+  const cacheKey = () => `porcos:cache:${user.id}:${grupoAtivo ? grupoAtivo.id : 'padrao'}`;
 
   function saveCache() {
     try {
-      localStorage.setItem(cacheKey(), JSON.stringify({ db, papel, at: loadedAt }));
+      localStorage.setItem(cacheKey(), JSON.stringify({ db, papel, grupoAtivo, at: loadedAt }));
     } catch (e) { /* sem espaço: tudo bem */ }
   }
 
@@ -2682,16 +3001,25 @@
     starting = true;
     showGate('loading');
     try {
-      papel = await Cloud.papel();
-      if (!papel) {
-        try { localStorage.removeItem(cacheKey()); } catch (e) { /* nada */ }
+      await processarConvitePendente();
+
+      grupos = await Cloud.inicializarUsuario();
+      if (!Array.isArray(grupos) || !grupos.length) {
+        papel = null;
+        grupoAtivo = null;
         showGate('noaccess');
         return;
       }
-      Cloud.registrarAcesso().catch(() => {}); // "Último acesso" em Conta → Quem tem acesso
+
+      const salvoId = localStorage.getItem('porcos:grupo_ativo');
+      grupoAtivo = grupos.find((g) => g.id === salvoId) || grupos[0];
+      papel = grupoAtivo.papel;
+      try { localStorage.setItem('porcos:grupo_ativo', grupoAtivo.id); } catch (e) {}
+
+      atualizarBtnGrupo();
       lerFila();
       if (fila.length) await enviarFila();
-      db = await Cloud.loadAll();
+      db = await Cloud.loadAll(grupoAtivo.id);
       loadedAt = Date.now();
       offline = false;
       await refreshFotos();
@@ -2704,6 +3032,8 @@
       if (c) {
         db = { ...emptyDb(), ...c.db };
         papel = c.papel;
+        grupoAtivo = c.grupoAtivo || { id: 'cache', nome: 'Meu Grupo', papel };
+        atualizarBtnGrupo();
         loadedAt = c.at;
         offline = true;
         fotoUrl = {};
@@ -2721,16 +3051,21 @@
   // Busca de novo tudo do banco (quiet: sem avisos)
   async function reload(quiet) {
     try {
-      const novoPapel = await Cloud.papel();
-      if (!novoPapel) {
+      grupos = await Cloud.inicializarUsuario();
+      if (!Array.isArray(grupos) || !grupos.length) {
         papel = null;
+        grupoAtivo = null;
         showGate('noaccess');
         return;
       }
-      papel = novoPapel;
-      Cloud.registrarAcesso().catch(() => {});
+      const atual = grupos.find((g) => g.id === (grupoAtivo && grupoAtivo.id)) || grupos[0];
+      grupoAtivo = atual;
+      papel = grupoAtivo.papel;
+      try { localStorage.setItem('porcos:grupo_ativo', grupoAtivo.id); } catch (e) {}
+      atualizarBtnGrupo();
+
       if (fila.length) await enviarFila();
-      db = await Cloud.loadAll();
+      db = await Cloud.loadAll(grupoAtivo.id);
       loadedAt = Date.now();
       offline = false;
       await refreshFotos();
@@ -2839,12 +3174,15 @@
   // ---------- Início ----------
 
   function init() {
+    verificarParametrosConvite();
     $$('[data-logo]').forEach((el) => { el.innerHTML = LOGO; });
     renderTheme();
     window.addEventListener('hashchange', () => {
       if (dlg.open) dlg.close();
       onRoute();
     });
+    const btnG = $('#btnGrupo');
+    if (btnG) btnG.addEventListener('click', () => dialogGrupos());
     bindApp();
   }
 
