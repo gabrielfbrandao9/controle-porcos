@@ -65,6 +65,7 @@
     file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
     trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
     external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
+    eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
     sos: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93 8.5 8.5M15.5 15.5l3.57 3.57M4.93 19.07 8.5 15.5M15.5 8.5l3.57-3.57"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
     google: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>',
@@ -980,14 +981,19 @@
     const url = docUrl[d.caminho];
     const catLabel = CATEGORIAS_DOC[d.categoria] || d.categoria || 'Outro';
     const ext = (d.nome_arquivo || '').split('.').pop().toLowerCase();
-    const isPdf = ext === 'pdf';
     const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
     const dataFmt = d.criado_em ? fmtDate(d.criado_em.slice(0, 10)) : '—';
     const icone = iconeTipoArquivo(ext);
 
+    const thumbHtml = isImg && url ? `
+      <div class="doc-thumb" data-act="sos-ver" data-id="${d.id}" title="Clique para visualizar">
+        <img src="${url}" alt="${esc(d.titulo || d.nome_arquivo)}" loading="lazy">
+      </div>` : '';
+
     return `
       <article class="doc-card card">
-        <div class="doc-card-top">
+        ${thumbHtml}
+        <div class="doc-card-top clickable" data-act="sos-ver" data-id="${d.id}" title="Clique para visualizar">
           <div class="doc-icon-wrap ext-${ext}">
             ${icone}
           </div>
@@ -1005,11 +1011,12 @@
           ${d.obs ? `<p class="doc-obs">${esc(d.obs)}</p>` : ''}
         </div>
         <div class="doc-card-actions">
+          <button type="button" class="btn small primary" data-act="sos-ver" data-id="${d.id}" title="Visualizar na página">
+            ${ICON.eye} Visualizar
+          </button>
           ${url
-            ? `<a class="btn small primary" href="${url}" target="_blank" rel="noopener noreferrer" ${isPdf || isImg ? '' : `download="${esc(d.nome_arquivo)}"`}>
-                ${isPdf || isImg ? ICON.external : ICON.download} ${isPdf || isImg ? 'Abrir' : 'Baixar'}
-               </a>`
-            : `<button type="button" class="btn small" data-act="sos-abrir" data-id="${d.id}" title="Carregar endereço">${ICON.download} Baixar</button>`
+            ? `<a class="btn small ghost icon" href="${url}" download="${esc(d.nome_arquivo)}" target="_blank" rel="noopener noreferrer" title="Baixar arquivo" aria-label="Baixar">${ICON.download}</a>`
+            : `<button type="button" class="btn small ghost icon" data-act="sos-abrir" data-id="${d.id}" title="Baixar arquivo">${ICON.download}</button>`
           }
           ${canEdit() ? `
             <button type="button" class="btn small ghost icon" data-act="sos-edit" data-id="${d.id}" title="Editar informações" aria-label="Editar">${ICON.edit}</button>
@@ -1017,6 +1024,110 @@
           ` : ''}
         </div>
       </article>`;
+  }
+
+  async function abrirVisualizador(d) {
+    if (!d) return;
+    const dlg = $('#viewerDlg');
+    if (!dlg) return;
+
+    let url = docUrl[d.caminho];
+    if (!url && navigator.onLine) {
+      toast('Carregando arquivo…', 15000);
+      try {
+        const urls = await Cloud.documentoUrls([d]);
+        if (urls[d.caminho]) {
+          url = urls[d.caminho];
+          docUrl[d.caminho] = url;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    const titleEl = $('#viewerTitle');
+    const metaEl = $('#viewerMeta');
+    const bodyEl = $('#viewerBody');
+    const dlBtn = $('#viewerDownloadBtn');
+    const newTabBtn = $('#viewerNewTabBtn');
+
+    const ext = (d.nome_arquivo || '').split('.').pop().toLowerCase();
+    const catLabel = CATEGORIAS_DOC[d.categoria] || d.categoria || 'Outro';
+    const dataFmt = d.criado_em ? fmtDate(d.criado_em.slice(0, 10)) : '—';
+
+    if (titleEl) titleEl.textContent = d.titulo || d.nome_arquivo;
+    if (metaEl) {
+      metaEl.innerHTML = `
+        <span class="badge cat-${esc(d.categoria || 'outro')}">${esc(catLabel)}</span>
+        <span class="muted">${esc(d.nome_arquivo)}</span>
+        <span class="muted">· ${esc(fmtBytes(d.tamanho))}</span>
+        <span class="muted">· ${esc(dataFmt)}</span>
+        ${d.obs ? `<span class="muted">· "${esc(d.obs)}"</span>` : ''}
+      `;
+    }
+
+    if (dlBtn) {
+      if (url) {
+        dlBtn.href = url;
+        dlBtn.download = d.nome_arquivo;
+        dlBtn.hidden = false;
+      } else {
+        dlBtn.hidden = true;
+      }
+    }
+    if (newTabBtn) {
+      if (url) {
+        newTabBtn.href = url;
+        newTabBtn.hidden = false;
+      } else {
+        newTabBtn.hidden = true;
+      }
+    }
+
+    if (!url) {
+      bodyEl.innerHTML = `<div class="viewer-fallback">
+        <div class="viewer-fallback-icon">${iconeTipoArquivo(ext)}</div>
+        <p><strong>Sem conexão com a nuvem</strong></p>
+        <p class="muted">Conecte-se à internet para visualizar ou baixar este arquivo.</p>
+      </div>`;
+      dlg.showModal();
+      return;
+    }
+
+    const isPdf = ext === 'pdf';
+    const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
+    const isText = ['txt', 'csv', 'log', 'json'].includes(ext);
+
+    if (isImg) {
+      bodyEl.innerHTML = `<div class="viewer-img-wrap">
+        <img src="${url}" alt="${esc(d.titulo || d.nome_arquivo)}" class="viewer-img">
+      </div>`;
+    } else if (isPdf) {
+      bodyEl.innerHTML = `<iframe src="${url}#view=FitH" class="viewer-frame" title="${esc(d.titulo || d.nome_arquivo)}"></iframe>`;
+    } else if (isText) {
+      bodyEl.innerHTML = `<div class="muted" style="padding: 20px;">Carregando texto…</div>`;
+      dlg.showModal();
+      try {
+        const resp = await fetch(url);
+        const txt = await resp.text();
+        bodyEl.innerHTML = `<pre class="viewer-text"><code>${esc(txt)}</code></pre>`;
+      } catch (err) {
+        bodyEl.innerHTML = `<div class="viewer-fallback">
+          <p class="muted">Não foi possível carregar a prévia do texto.</p>
+          <a class="btn primary" href="${url}" download="${esc(d.nome_arquivo)}">${ICON.download} Baixar arquivo</a>
+        </div>`;
+      }
+      return;
+    } else {
+      bodyEl.innerHTML = `<div class="viewer-fallback">
+        <div class="viewer-fallback-icon">${iconeTipoArquivo(ext)}</div>
+        <p><strong>${esc(d.nome_arquivo)}</strong></p>
+        <p class="muted">Este tipo de arquivo (.${ext.toUpperCase()}) não pode ser visualizado diretamente no navegador, mas você pode baixá-lo no seu aparelho.</p>
+        <a class="btn primary" href="${url}" download="${esc(d.nome_arquivo)}">${ICON.download} Baixar arquivo (${esc(fmtBytes(d.tamanho))})</a>
+      </div>`;
+    }
+
+    dlg.showModal();
   }
 
   function renderSos() {
@@ -3080,6 +3191,7 @@
     'fotos-lote': () => $('#fotosLote').click(),
     'sos-novo': () => $('#sosInput').click(),
     'sos-filtro': (el) => { filtroSos = el.dataset.value; render(); },
+    'sos-ver': (el) => abrirVisualizador(byId('documentos', el.dataset.id)),
     'sos-edit': (el) => formEditarSos(byId('documentos', el.dataset.id)),
     'sos-delete': (el) => excluirSos(byId('documentos', el.dataset.id)),
     'sos-abrir': async (el) => {
@@ -3583,6 +3695,8 @@
     renderTheme();
     window.addEventListener('hashchange', () => {
       if (dlg.open) dlg.close();
+      const vDlg = $('#viewerDlg');
+      if (vDlg && vDlg.open) vDlg.close();
       onRoute();
     });
     const btnG = $('#btnGrupo');
@@ -3625,6 +3739,20 @@
         processarArquivosSos(e.dataTransfer.files);
       }
     });
+
+    const viewerDlg = $('#viewerDlg');
+    const viewerClose = $('#viewerCloseBtn');
+    if (viewerClose && viewerDlg) {
+      viewerClose.addEventListener('click', () => viewerDlg.close());
+      viewerDlg.addEventListener('click', (e) => {
+        const rect = viewerDlg.getBoundingClientRect();
+        const inDialog = (
+          rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+          rect.left <= e.clientX && e.clientX <= rect.left + rect.width
+        );
+        if (!inDialog) viewerDlg.close();
+      });
+    }
 
     bindApp();
   }

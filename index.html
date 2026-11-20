@@ -95,6 +95,24 @@
     <form method="dialog" class="dlg" id="dlgForm" novalidate></form>
   </dialog>
 
+  <!-- Visualizador de arquivos na própria página (SOS Suínos) -->
+  <dialog id="viewerDlg" class="viewer-dialog">
+    <div class="viewer-head">
+      <div class="viewer-info">
+        <h2 id="viewerTitle">Visualizar arquivo</h2>
+        <div id="viewerMeta" class="doc-sub"></div>
+      </div>
+      <div class="viewer-head-actions">
+        <a id="viewerDownloadBtn" class="btn small" download target="_blank" rel="noopener">Baixar</a>
+        <a id="viewerNewTabBtn" class="btn small ghost icon" target="_blank" rel="noopener" title="Abrir em nova aba">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </a>
+        <button type="button" class="icon" id="viewerCloseBtn" aria-label="Fechar">×</button>
+      </div>
+    </div>
+    <div class="viewer-body" id="viewerBody"></div>
+  </dialog>
+
   <input type="file" id="fotoInput" accept="image/*" hidden>
   <input type="file" id="fotosLote" accept="image/*" multiple hidden>
   <input type="file" id="sosInput" multiple hidden>
