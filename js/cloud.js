@@ -10,6 +10,7 @@
   const client = global.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
   const BUCKET = 'porcos-fotos';
   const BULAS = 'porcos-bulas';
+  const DOCUMENTOS = 'porcos-documentos';
   const TABLES = {
     animais: 'porcos_animais',
     gestacoes: 'porcos_gestacoes',
@@ -18,6 +19,7 @@
     abates: 'porcos_abates',
     lancamentos: 'porcos_lancamentos',
     racoes: 'porcos_racoes',
+    documentos: 'porcos_documentos',
   };
   const PAGE = 1000;
 
@@ -33,7 +35,15 @@
     for (let from = 0; ; from += PAGE) {
       let query = client.from(table).select('*');
       if (grupoId) query = query.eq('grupo_id', grupoId);
-      const rows = check(await query.order('id').range(from, from + PAGE - 1));
+      const res = await query.order('id').range(from, from + PAGE - 1);
+      if (res.error) {
+        if (res.error.code === '42P01' || /relation.*does not exist/i.test(res.error.message || '')) {
+          console.warn(`Tabela ${table} não encontrada no banco. Execute o schema.sql atualizado.`);
+          return [];
+        }
+        throw res.error;
+      }
+      const rows = res.data || [];
       all.push(...rows);
       if (rows.length < PAGE) return all;
     }
@@ -153,7 +163,7 @@
       }
     },
 
-    BUCKETS: { fotos: BUCKET, bulas: BULAS },
+    BUCKETS: { fotos: BUCKET, bulas: BULAS, documentos: DOCUMENTOS },
 
     async downloadArquivo(bucket, path) {
       return check(await client.storage.from(bucket).download(path));
@@ -195,6 +205,60 @@
       if (!paths.length) return {};
       const rows = check(await client.storage.from(BULAS).createSignedUrls(paths, 6 * 3600));
       return Object.fromEntries(rows.filter((r) => r.signedUrl).map((r) => [r.path, r.signedUrl]));
+    },
+
+    // ---------- Documentos do SOS Suínos ----------
+
+    async uploadDocumento(path, file) {
+      try {
+        check(await client.storage.from(DOCUMENTOS).upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: true }));
+        return DOCUMENTOS;
+      } catch (err) {
+        // Se o bucket porcos-documentos ainda não foi criado no Supabase, tenta porcos-bulas como alternativa
+        if (/bucket not found/i.test(err.message || '') || err.statusCode === '404' || err.status === 404) {
+          check(await client.storage.from(BULAS).upload(`sos/${path}`, file, { contentType: file.type || 'application/octet-stream', upsert: true }));
+          return BULAS;
+        }
+        throw err;
+      }
+    },
+
+    async removeDocumentos(items) {
+      if (!items || !items.length) return;
+      const porBucket = {};
+      items.forEach((it) => {
+        const p = typeof it === 'string' ? it : it.caminho;
+        const b = (typeof it === 'object' && it.bucket) || DOCUMENTOS;
+        if (!p) return;
+        if (!porBucket[b]) porBucket[b] = [];
+        porBucket[b].push(p);
+      });
+      for (const [b, paths] of Object.entries(porBucket)) {
+        try {
+          check(await client.storage.from(b).remove(paths));
+        } catch (e) {}
+      }
+    },
+
+    // { caminho: url temporária }
+    async documentoUrls(items) {
+      if (!items || !items.length) return {};
+      const res = {};
+      const porBucket = {};
+      items.forEach((it) => {
+        const p = typeof it === 'string' ? it : it.caminho;
+        const b = (typeof it === 'object' && it.bucket) || DOCUMENTOS;
+        if (!p) return;
+        if (!porBucket[b]) porBucket[b] = [];
+        porBucket[b].push(p);
+      });
+      for (const [b, paths] of Object.entries(porBucket)) {
+        try {
+          const rows = check(await client.storage.from(b).createSignedUrls(paths, 6 * 3600));
+          rows.filter((r) => r.signedUrl).forEach((r) => { res[r.path] = r.signedUrl; });
+        } catch (e) {}
+      }
+      return res;
     },
 
     // Erro de permissão (RLS) vindo do banco

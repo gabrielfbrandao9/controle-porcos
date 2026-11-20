@@ -19,7 +19,7 @@
   'use strict';
 
   const {
-    esc, fmtDate, fmtAge, fmtRelative, fmtMoney, fmtNum, fmtKg, fmtPct, fmtMonth, fmtMonthLong,
+    esc, fmtDate, fmtAge, fmtRelative, fmtMoney, fmtNum, fmtKg, fmtPct, fmtBytes, fmtMonth, fmtMonthLong,
     parseNum, toInput, hoje, addDays, diffDays, daysUntil, ordinal, plural,
   } = U;
   const $ = (s, el = document) => el.querySelector(s);
@@ -39,6 +39,14 @@
     outras: { tipo: 'despesa', label: 'Outras despesas' },
     venda: { tipo: 'receita', label: 'Receita (vendas)' },
   };
+  const CATEGORIAS_DOC = {
+    manual: 'Manual / Guia',
+    saude: 'Saúde & Sintomas',
+    nutricao: 'Nutrição & Manejo',
+    laudo: 'Laudo / Exame',
+    financeiro: 'Notas & Comprovantes',
+    outro: 'Outro',
+  };
   const PAPEIS = { dono: 'Dono', editor: 'Pode editar', leitor: 'Só ver' };
   const GESTACAO_DIAS = 114;
   const AVISO_DIAS = 15;
@@ -53,6 +61,11 @@
     ok: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
     chevron: '<svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5"/><path d="M5 19.5h14"/></svg>',
+    upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+    file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
+    sos: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93 8.5 8.5M15.5 15.5l3.57 3.57M4.93 19.07 8.5 15.5M15.5 8.5l3.57-3.57"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
     google: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>',
   };
@@ -70,7 +83,7 @@
 
   // ---------- Estado ----------
 
-  const emptyDb = () => ({ animais: [], gestacoes: [], produtos: [], aplicacoes: [], abates: [], lancamentos: [], racoes: [] });
+  const emptyDb = () => ({ animais: [], gestacoes: [], produtos: [], aplicacoes: [], abates: [], lancamentos: [], racoes: [], documentos: [] });
 
   let user = null;
   let papel = null;
@@ -81,6 +94,9 @@
   let db = emptyDb();
   let fotoUrl = {};
   let bulaUrl = {};
+  let docUrl = {};
+  let buscaSos = '';
+  let filtroSos = 'todos';
   let loadedAt = 0;
   let offline = false;
   let current = { name: 'inicio', id: null };
@@ -241,6 +257,7 @@
       saude: renderSaude,
       racao: renderRacao,
       financas: renderFinancas,
+      sos: renderSos,
       conta: renderConta,
     };
     view.innerHTML = banners() + (pages[current.name] || renderInicio)();
@@ -944,6 +961,171 @@
       <p class="muted small">Valor e preço médio só contam as partes lançadas com preço. Abates antigos têm só o valor total.</p>`, { sub: true });
   }
 
+  // ---------- SOS Suínos (Documentos e Apoio ao Manejo) ----------
+
+  function iconeTipoArquivo(ext) {
+    if (ext === 'pdf') {
+      return `<svg viewBox="0 0 24 24" class="svg-pdf" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15h6"/><path d="M9 11h6"/><path d="M9 19h4"/></svg>`;
+    }
+    if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext)) {
+      return `<svg viewBox="0 0 24 24" class="svg-img" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+    }
+    if (['xls', 'xlsx', 'csv'].includes(ext)) {
+      return `<svg viewBox="0 0 24 24" class="svg-sheet" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>`;
+    }
+    return `<svg viewBox="0 0 24 24" class="svg-doc" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  }
+
+  function renderDocCard(d) {
+    const url = docUrl[d.caminho];
+    const catLabel = CATEGORIAS_DOC[d.categoria] || d.categoria || 'Outro';
+    const ext = (d.nome_arquivo || '').split('.').pop().toLowerCase();
+    const isPdf = ext === 'pdf';
+    const isImg = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
+    const dataFmt = d.criado_em ? fmtDate(d.criado_em.slice(0, 10)) : '—';
+    const icone = iconeTipoArquivo(ext);
+
+    return `
+      <article class="doc-card card">
+        <div class="doc-card-top">
+          <div class="doc-icon-wrap ext-${ext}">
+            ${icone}
+          </div>
+          <div class="doc-card-info">
+            <h3 class="doc-title" title="${esc(d.titulo || d.nome_arquivo)}">${esc(d.titulo || d.nome_arquivo)}</h3>
+            <div class="doc-sub">
+              <span class="badge cat-${esc(d.categoria || 'outro')}">${esc(catLabel)}</span>
+              <span class="muted">${esc(fmtBytes(d.tamanho))}</span>
+              <span class="muted">· ${esc(dataFmt)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="doc-card-body">
+          <div class="doc-filename muted" title="${esc(d.nome_arquivo)}">${esc(d.nome_arquivo)}</div>
+          ${d.obs ? `<p class="doc-obs">${esc(d.obs)}</p>` : ''}
+        </div>
+        <div class="doc-card-actions">
+          ${url
+            ? `<a class="btn small primary" href="${url}" target="_blank" rel="noopener noreferrer" ${isPdf || isImg ? '' : `download="${esc(d.nome_arquivo)}"`}>
+                ${isPdf || isImg ? ICON.external : ICON.download} ${isPdf || isImg ? 'Abrir' : 'Baixar'}
+               </a>`
+            : `<button type="button" class="btn small" data-act="sos-abrir" data-id="${d.id}" title="Carregar endereço">${ICON.download} Baixar</button>`
+          }
+          ${canEdit() ? `
+            <button type="button" class="btn small ghost icon" data-act="sos-edit" data-id="${d.id}" title="Editar informações" aria-label="Editar">${ICON.edit}</button>
+            <button type="button" class="btn small danger-ghost icon" data-act="sos-delete" data-id="${d.id}" title="Excluir arquivo" aria-label="Excluir">${ICON.trash}</button>
+          ` : ''}
+        </div>
+      </article>`;
+  }
+
+  function renderSos() {
+    const docs = db.documentos || [];
+    const totalArquivos = docs.length;
+    const totalBytes = docs.reduce((acc, d) => acc + (Number(d.tamanho) || 0), 0);
+
+    // Contadores por categoria
+    const counts = { todos: totalArquivos };
+    Object.keys(CATEGORIAS_DOC).forEach((k) => {
+      counts[k] = docs.filter((d) => d.categoria === k).length;
+    });
+
+    // Filtros
+    let lista = docs;
+    if (filtroSos !== 'todos') {
+      lista = lista.filter((d) => d.categoria === filtroSos);
+    }
+    if (buscaSos.trim()) {
+      const q = buscaSos.toLowerCase().trim();
+      lista = lista.filter((d) =>
+        (d.titulo && d.titulo.toLowerCase().includes(q)) ||
+        (d.nome_arquivo && d.nome_arquivo.toLowerCase().includes(q)) ||
+        (d.obs && d.obs.toLowerCase().includes(q)) ||
+        (CATEGORIAS_DOC[d.categoria] && CATEGORIAS_DOC[d.categoria].toLowerCase().includes(q))
+      );
+    }
+    lista = [...lista].sort((a, b) => (b.criado_em || '').localeCompare(a.criado_em || '') || (b.ordem || 0) - (a.ordem || 0));
+
+    // Chips de filtro
+    const chip = (k, label) => `<button type="button" class="chip${filtroSos === k ? ' on' : ''}${counts[k] === 0 && k !== 'todos' ? ' dim' : ''}" data-act="sos-filtro" data-value="${k}">${label} <span class="n">${counts[k]}</span></button>`;
+    const chipsHtml = `<div class="chips">
+      ${chip('todos', 'Todos')}
+      ${Object.entries(CATEGORIAS_DOC).map(([k, label]) => chip(k, label)).join('')}
+    </div>`;
+
+    // Dropzone card
+    const dropzoneHtml = canEdit() ? `
+      <div class="sos-dropzone card" id="sosDropzone" tabindex="0" role="button" aria-label="Enviar novo arquivo para SOS Suínos" data-act="sos-novo">
+        <div class="sos-dropzone-icon">${ICON.upload}</div>
+        <div class="sos-dropzone-text">
+          <strong>Clique para selecionar ou arraste arquivos aqui</strong>
+          <small class="muted">Suporta PDFs, imagens, laudos, manuais, planilhas e documentos (até 50 MB)</small>
+        </div>
+        <button type="button" class="btn primary small">${ICON.plus} Selecionar arquivo</button>
+      </div>` : '';
+
+    // Estatísticas
+    const statsHtml = `
+      <div class="stats" style="margin-bottom: 20px;">
+        <div class="stat">
+          <span class="stat-label">Arquivos salvos</span>
+          <span class="stat-value">${totalArquivos}</span>
+          <span class="stat-sub">${plural(totalArquivos, 'documento no plantel', 'documentos no plantel')}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Espaço utilizado</span>
+          <span class="stat-value">${fmtBytes(totalBytes)}</span>
+          <span class="stat-sub">Armazenamento em nuvem</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Manuais & Guias</span>
+          <span class="stat-value">${counts.manual || 0}</span>
+          <span class="stat-sub">Cartilhas técnicas</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Saúde & Laudos</span>
+          <span class="stat-value">${(counts.saude || 0) + (counts.laudo || 0)}</span>
+          <span class="stat-sub">Exames e veterinária</span>
+        </div>
+      </div>`;
+
+    // Busca
+    const buscaHtml = totalArquivos > 0 ? `
+      <div class="sos-search-bar">
+        <input type="search" class="busca" id="buscaSos" placeholder="Buscar documento por nome, categoria ou anotação…" value="${esc(buscaSos)}" autocomplete="off">
+      </div>` : '';
+
+    // Render list/cards
+    let docsHtml = '';
+    if (!lista.length) {
+      if (totalArquivos === 0) {
+        docsHtml = `<div class="card empty-box" style="padding: 32px 20px; text-align: center; flex-direction: column; gap: 12px; justify-content: center;">
+          <div style="font-size: 2.2rem; color: var(--accent);">${ICON.sos}</div>
+          <div>
+            <h3 style="font-size: 1.15rem; margin-bottom: 4px;">Nenhum arquivo enviado ainda</h3>
+            <p class="muted" style="max-width: 480px; margin: 0 auto 16px;">Guarde aqui cartilhas sanitárias, manuais da Embrapa e ABCS, fotos de exames, receitas veterinárias e tabelas de apoio à criação de suínos.</p>
+            ${canEdit() ? `<button type="button" class="btn primary" data-act="sos-novo">${ICON.plus} Enviar primeiro arquivo</button>` : ''}
+          </div>
+        </div>`;
+      } else {
+        docsHtml = `<div class="card empty-box" style="padding: 24px; text-align: center; justify-content: center;">
+          <p class="muted">Nenhum documento encontrado com os filtros atuais.</p>
+        </div>`;
+      }
+    } else {
+      docsHtml = `<div class="sos-grid">${lista.map((d) => renderDocCard(d)).join('')}</div>`;
+    }
+
+    return `
+      ${pageHead('SOS Suínos', 'Manuais técnicos, laudos, cartilhas, bulas e arquivos de apoio ao manejo', canEdit() ? `<button type="button" class="btn primary" data-act="sos-novo">${ICON.plus} Enviar arquivo</button>` : '')}
+      ${statsHtml}
+      ${dropzoneHtml}
+      ${chipsHtml}
+      ${buscaHtml}
+      ${docsHtml}
+    `;
+  }
+
   // ---------- Conta, Grupos e Convites ----------
 
   function renderConta() {
@@ -1504,6 +1686,7 @@
   }
 
   async function save(kind, id, row) {
+    if (!db[kind]) db[kind] = [];
     if (await online()) {
       try {
         if (id) {
@@ -1516,7 +1699,13 @@
         db[kind].push(r);
         return r;
       } catch (err) {
-        if (!semRede(err)) throw err;
+        if (!semRede(err)) {
+          if (err && (err.code === '42P01' || /relation.*does not exist/i.test(err.message || ''))) {
+            console.warn(`Tabela ${kind} ainda não criada no Supabase. Salvando localmente.`);
+          } else {
+            throw err;
+          }
+        }
       }
     }
     const agora = new Date().toISOString();
@@ -2166,6 +2355,167 @@
     dlg.addEventListener('close', () => { form.oninput = null; form.onclick = null; }, { once: true });
   }
 
+  // ---------- SOS Suínos: Envio e Gerenciamento de Arquivos ----------
+
+  function formUploadSos(file) {
+    if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      toast('O arquivo passa do limite de 50 MB.');
+      return;
+    }
+    const nomePadrao = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+    const tituloSugerido = nomePadrao.charAt(0).toUpperCase() + nomePadrao.slice(1);
+
+    // Sugere categoria pelo nome do arquivo
+    let catSugerida = 'manual';
+    const n = file.name.toLowerCase();
+    if (/vacina|doenca|doença|remedio|remédio|saude|saúde|sintoma/i.test(n)) catSugerida = 'saude';
+    else if (/racao|ração|nutricao|nutrição|alimento|manejo|baia/i.test(n)) catSugerida = 'nutricao';
+    else if (/laudo|exame|necropsia|necrópsia|veterinario|veterinário/i.test(n)) catSugerida = 'laudo';
+    else if (/nota|comprovante|recibo|pagamento|custo/i.test(n)) catSugerida = 'financeiro';
+
+    openForm({
+      title: 'Enviar arquivo para SOS Suínos',
+      intro: `Arquivo selecionado: <strong>${esc(file.name)}</strong> (${esc(fmtBytes(file.size))})`,
+      values: {
+        titulo: tituloSugerido,
+        categoria: catSugerida,
+        obs: '',
+      },
+      fields: [
+        { name: 'titulo', label: 'Título ou nome do documento', type: 'text', required: true },
+        { name: 'categoria', label: 'Categoria', type: 'select', required: true, options: Object.entries(CATEGORIAS_DOC).map(([k, v]) => [k, v]) },
+        { name: 'obs', label: 'Anotações / Observações (opcional)', type: 'textarea' },
+      ],
+      submitLabel: 'Enviar para a nuvem',
+      onSave: async (v) => {
+        if (!navigator.onLine) throw new Error('Para enviar arquivos para a nuvem, conecte-se à internet.');
+        toast('Enviando arquivo para a nuvem…', 25000);
+        const limpo = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${grupoAtivo ? grupoAtivo.id : 'geral'}/${Date.now()}_${limpo}`;
+        const bucketUsado = await Cloud.uploadDocumento(path, file);
+        const salvo = await save('documentos', null, {
+          titulo: v.titulo.trim() || file.name,
+          nome_arquivo: file.name,
+          caminho: path,
+          bucket: bucketUsado,
+          tamanho: file.size,
+          tipo_mime: file.type || '',
+          categoria: v.categoria,
+          obs: v.obs ? v.obs.trim() : '',
+          ordem: (db.documentos || []).reduce((m, x) => Math.max(m, x.ordem || 0), 0) + 1,
+        });
+        try {
+          const urls = await Cloud.documentoUrls([salvo]);
+          Object.assign(docUrl, urls);
+        } catch (e) {}
+        render();
+        return 'Arquivo enviado com sucesso!';
+      },
+    });
+  }
+
+  async function uploadMultiplosSos(files) {
+    if (!navigator.onLine) return toast('Conecte-se à internet para enviar os arquivos.');
+    toast(`Enviando ${files.length} arquivos…`, 30000);
+    let enviados = 0;
+    for (const file of files) {
+      if (file.size > 50 * 1024 * 1024) continue;
+      const limpo = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${grupoAtivo ? grupoAtivo.id : 'geral'}/${Date.now()}_${limpo}`;
+      try {
+        const bucket = await Cloud.uploadDocumento(path, file);
+        let categoria = 'outro';
+        const n = file.name.toLowerCase();
+        if (/manual|cartilha|guia/i.test(n)) categoria = 'manual';
+        else if (/vacina|doenca|doença|remedio|remédio|saude|saúde|sintoma/i.test(n)) categoria = 'saude';
+        else if (/racao|ração|nutricao|nutrição|alimento|manejo/i.test(n)) categoria = 'nutricao';
+        else if (/laudo|exame|necropsia|necrópsia/i.test(n)) categoria = 'laudo';
+        else if (/nota|comprovante|recibo/i.test(n)) categoria = 'financeiro';
+
+        const nomePadrao = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+        const titulo = nomePadrao.charAt(0).toUpperCase() + nomePadrao.slice(1);
+        const salvo = await save('documentos', null, {
+          titulo,
+          nome_arquivo: file.name,
+          caminho: path,
+          bucket,
+          tamanho: file.size,
+          tipo_mime: file.type || '',
+          categoria,
+          obs: '',
+          ordem: (db.documentos || []).reduce((m, x) => Math.max(m, x.ordem || 0), 0) + 1,
+        });
+        try {
+          const urls = await Cloud.documentoUrls([salvo]);
+          Object.assign(docUrl, urls);
+        } catch (e) {}
+        enviados++;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    render();
+    toast(`${plural(enviados, 'arquivo enviado', 'arquivos enviados')} com sucesso!`);
+  }
+
+  function processarArquivosSos(fileList) {
+    if (!fileList || !fileList.length) return;
+    const files = [...fileList];
+    if (files.length === 1) {
+      formUploadSos(files[0]);
+    } else {
+      uploadMultiplosSos(files);
+    }
+  }
+
+  function formEditarSos(d) {
+    if (!d) return;
+    openForm({
+      title: 'Editar documento',
+      intro: `Arquivo: <strong>${esc(d.nome_arquivo)}</strong> (${esc(fmtBytes(d.tamanho))})`,
+      values: {
+        titulo: d.titulo || d.nome_arquivo,
+        categoria: d.categoria || 'manual',
+        obs: d.obs || '',
+      },
+      fields: [
+        { name: 'titulo', label: 'Título do documento', type: 'text', required: true },
+        { name: 'categoria', label: 'Categoria', type: 'select', required: true, options: Object.entries(CATEGORIAS_DOC).map(([k, v]) => [k, v]) },
+        { name: 'obs', label: 'Observações / Anotações', type: 'textarea' },
+      ],
+      submitLabel: 'Salvar alterações',
+      onSave: async (v) => {
+        await save('documentos', d.id, {
+          titulo: v.titulo.trim() || d.nome_arquivo,
+          categoria: v.categoria,
+          obs: v.obs ? v.obs.trim() : '',
+        });
+        return 'Documento atualizado';
+      },
+      onDelete: async () => {
+        await remove('documentos', d.id);
+        if (d.caminho) Cloud.removeDocumentos([d]).catch(() => {});
+        return 'Documento excluído';
+      },
+    });
+  }
+
+  async function excluirSos(d) {
+    if (!d) return;
+    if (!confirm(`Excluir o arquivo "${d.titulo || d.nome_arquivo}"? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await remove('documentos', d.id);
+      if (d.caminho) {
+        Cloud.removeDocumentos([d]).catch(() => {});
+      }
+      render();
+      toast('Arquivo excluído');
+    } catch (err) {
+      toast(errMsg(err));
+    }
+  }
+
   // ---------- Fotos ----------
 
   let fotoAlvo = null;
@@ -2258,10 +2608,11 @@
     $('.fields', form).innerHTML = lista;
   });
 
-  // Endereços temporários das fotos e dos arquivos de bula (os buckets são privados)
+  // Endereços temporários das fotos e dos arquivos de bula e documentos (os buckets são privados)
   async function refreshFotos() {
     const paths = db.animais.map((a) => a.foto).filter(Boolean);
     const bulas = db.produtos.map((p) => p.bula_arquivo).filter(Boolean);
+    const docs = (db.documentos || []).map((d) => ({ caminho: d.caminho, bucket: d.bucket })).filter((x) => x.caminho);
     try {
       fotoUrl = await Cloud.fotoUrls(paths);
     } catch (err) {
@@ -2271,6 +2622,11 @@
       bulaUrl = await Cloud.bulaUrls(bulas);
     } catch (err) {
       bulaUrl = {};
+    }
+    try {
+      docUrl = await Cloud.documentoUrls(docs);
+    } catch (err) {
+      docUrl = {};
     }
   }
 
@@ -2400,6 +2756,14 @@
       row['Soma (%)'] = (r.itens || []).reduce((s, i) => s + Number(i.pct || 0), 0);
       return row;
     });
+    const docsExcel = (db.documentos || []).map((d) => ({
+      Título: d.titulo || '',
+      Arquivo: d.nome_arquivo || '',
+      Categoria: CATEGORIAS_DOC[d.categoria] || d.categoria || 'Outro',
+      Tamanho: fmtBytes(d.tamanho),
+      Data: xDate(d.criado_em ? d.criado_em.slice(0, 10) : null),
+      Observações: d.obs || '',
+    }));
     const dinheiroAbates = Object.keys(abates[0] || {}).filter((k) => k.endsWith('(R$)') || k === 'Valor total');
     return [
       { nome: 'Animais', linhas: animais, dinheiro: ['Valor de compra', 'Valor da venda'] },
@@ -2410,6 +2774,7 @@
       { nome: 'Lançamentos', linhas: lancamentos, dinheiro: ['Valor'] },
       { nome: 'Por mês', linhas: porMes, dinheiro: ['Soro', 'Ração', 'Outras', 'Receitas', 'Saldo'] },
       { nome: 'Ração', linhas: racao },
+      { nome: 'SOS Suínos', linhas: docsExcel },
     ];
   }
 
@@ -2509,6 +2874,7 @@
     const lista = [];
     db.animais.forEach((a) => { if (a.foto) lista.push({ bucket: Cloud.BUCKETS.fotos, path: a.foto }); });
     db.produtos.forEach((p) => { if (p.bula_arquivo) lista.push({ bucket: Cloud.BUCKETS.bulas, path: p.bula_arquivo }); });
+    (db.documentos || []).forEach((d) => { if (d.caminho) lista.push({ bucket: d.bucket || Cloud.BUCKETS.documentos, path: d.caminho }); });
     return lista;
   }
 
@@ -2595,7 +2961,7 @@
     });
   }
 
-  const ORDEM_APAGAR = ['aplicacoes', 'abates', 'lancamentos', 'racoes', 'gestacoes', 'animais', 'produtos'];
+  const ORDEM_APAGAR = ['documentos', 'aplicacoes', 'abates', 'lancamentos', 'racoes', 'gestacoes', 'animais', 'produtos'];
 
   // Substitui os dados atuais pelos da cópia. progresso(texto) mostra em que passo está.
   async function restaurarCopia({ dados, arquivos }, progresso) {
@@ -2617,7 +2983,7 @@
     progresso('Gravando gestações…');
     await Cloud.upsertMany('gestacoes', novos.gestacoes);
     await Cloud.upsertMany('animais', novos.animais);
-    for (const [kind, nome] of [['aplicacoes', 'aplicações'], ['abates', 'abates'], ['lancamentos', 'lançamentos'], ['racoes', 'ração']]) {
+    for (const [kind, nome] of [['aplicacoes', 'aplicações'], ['abates', 'abates'], ['lancamentos', 'lançamentos'], ['racoes', 'ração'], ['documentos', 'SOS Suínos (arquivos)']]) {
       progresso(`Gravando ${nome}…`);
       await Cloud.upsertMany(kind, novos[kind]);
     }
@@ -2642,7 +3008,7 @@
     const { dados, arquivos } = copia;
     const linhas = Object.entries(Cloud.TABLES).map(([kind, tabela]) => {
       const nCopia = Array.isArray(dados.tabelas[tabela]) ? dados.tabelas[tabela].length : 0;
-      const nomes = { animais: 'Animais', gestacoes: 'Gestações', produtos: 'Vacinas e remédios', aplicacoes: 'Aplicações', abates: 'Abates', lancamentos: 'Lançamentos', racoes: 'Fases de ração' };
+      const nomes = { animais: 'Animais', gestacoes: 'Gestações', produtos: 'Vacinas e remédios', aplicacoes: 'Aplicações', abates: 'Abates', lancamentos: 'Lançamentos', racoes: 'Fases de ração', documentos: 'SOS Suínos' };
       return `<tr><th scope="row">${nomes[kind]}</th><td class="num">${db[kind].length}</td><td class="num"><strong>${nCopia}</strong></td></tr>`;
     }).join('');
     const quando = dados.exportado_em ? new Date(dados.exportado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '?';
@@ -2712,6 +3078,28 @@
     'saude-animais': (el) => setSaude('animais', el.dataset.value),
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
     'fotos-lote': () => $('#fotosLote').click(),
+    'sos-novo': () => $('#sosInput').click(),
+    'sos-filtro': (el) => { filtroSos = el.dataset.value; render(); },
+    'sos-edit': (el) => formEditarSos(byId('documentos', el.dataset.id)),
+    'sos-delete': (el) => excluirSos(byId('documentos', el.dataset.id)),
+    'sos-abrir': async (el) => {
+      const d = byId('documentos', el.dataset.id);
+      if (!d) return;
+      if (!navigator.onLine) return toast('Conecte-se à internet para baixar este arquivo.');
+      try {
+        toast('Gerando link…');
+        const urls = await Cloud.documentoUrls([d]);
+        if (urls[d.caminho]) {
+          docUrl[d.caminho] = urls[d.caminho];
+          window.open(urls[d.caminho], '_blank', 'noopener,noreferrer');
+          render();
+        } else {
+          toast('Não foi possível obter o link do arquivo.');
+        }
+      } catch (err) {
+        toast(errMsg(err));
+      }
+    },
     exportar: (el) => exportarExcel(el),
     'exportar-json': () => exportarJson(),
     'exportar-zip': (el) => exportarZip(el),
@@ -2817,6 +3205,21 @@
     if (e.target.id === 'buscaAnimais') {
       buscaAnimais = e.target.value;
       filtrarAnimais();
+      return;
+    }
+    if (e.target.id === 'buscaSos') {
+      buscaSos = e.target.value;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderSos();
+      const newGrid = $('.sos-grid', tmp);
+      const currGrid = $('.sos-grid');
+      if (currGrid && newGrid) {
+        currGrid.innerHTML = newGrid.innerHTML;
+      } else {
+        render();
+        const b = $('#buscaSos');
+        if (b) { b.focus(); b.selectionStart = b.selectionEnd = b.value.length; }
+      }
       return;
     }
     if (e.target.id !== 'racaoQtd') return;
@@ -3184,6 +3587,45 @@
     });
     const btnG = $('#btnGrupo');
     if (btnG) btnG.addEventListener('click', () => dialogGrupos());
+
+    const sosIn = $('#sosInput');
+    if (sosIn) {
+      sosIn.addEventListener('change', (e) => {
+        const files = e.target.files;
+        if (files && files.length) {
+          processarArquivosSos(files);
+          e.target.value = '';
+        }
+      });
+    }
+
+    document.addEventListener('dragover', (e) => {
+      if (current.name !== 'sos') return;
+      const dropzone = $('#sosDropzone');
+      if (dropzone && (dropzone.contains(e.target) || dropzone === e.target)) {
+        e.preventDefault();
+        dropzone.classList.add('drag-over');
+      }
+    });
+
+    document.addEventListener('dragleave', (e) => {
+      if (current.name !== 'sos') return;
+      const dropzone = $('#sosDropzone');
+      if (dropzone && (!e.relatedTarget || !dropzone.contains(e.relatedTarget))) {
+        dropzone.classList.remove('drag-over');
+      }
+    });
+
+    document.addEventListener('drop', (e) => {
+      if (current.name !== 'sos') return;
+      const dropzone = $('#sosDropzone');
+      if (dropzone) dropzone.classList.remove('drag-over');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        e.preventDefault();
+        processarArquivosSos(e.dataTransfer.files);
+      }
+    });
+
     bindApp();
   }
 

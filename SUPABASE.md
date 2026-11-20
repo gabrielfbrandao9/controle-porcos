@@ -43,7 +43,9 @@ Em **Authentication** → **URL Configuration** → **Redirect URLs**:
 | `porcos_abates` | Registros de abate no grupo (`grupo_id`) |
 | `porcos_lancamentos` | Gastos e receitas no grupo (`grupo_id`) |
 | `porcos_racoes` | Fórmulas de ração por fase no grupo (`grupo_id`) |
+| `porcos_documentos` | Arquivos, manuais e laudos técnicos do SOS Suínos no grupo (`grupo_id`) |
 
 Storage:
 - Bucket `porcos-fotos`: fotos dos animais (privado, até 5 MB).
 - Bucket `porcos-bulas`: bulas em PDF ou imagem (privado, até 20 MB).
+- Bucket `porcos-documentos`: arquivos, laudos, fotos e manuais do SOS Suínos (privado, até 50 MB).

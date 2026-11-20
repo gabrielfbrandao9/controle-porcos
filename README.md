@@ -28,6 +28,9 @@ quem decide é o dono, na tela **Conta**. Veja [SUPABASE.md](SUPABASE.md).
   ou da quantidade de milho que você tem.
 - **Finanças**: gastos (soro, ração, outras despesas) e receitas por mês, saldo, margem e abates (carne,
   toucinho, valor), com filtro por ano.
+- **SOS Suínos**: biblioteca de documentos e arquivos técnicos do plantel. Permite fazer upload de manuais
+  técnicos, cartilhas sanitárias, laudos veterinários, fotos de exames, receitas e notas fiscais com categorização,
+  busca rápida e suporte a arrastar e soltar (drag & drop).
 
 Idades, duração das gestações, próximas vacinas e totais são calculados pelo site: não precisa digitar.
 

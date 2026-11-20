@@ -108,6 +108,15 @@
   const fmtKg = (v) => (v == null || v === '' ? '—' : `${kgFmt.format(Number(v))} kg`);
   const fmtPct = (v) => `${numFmt.format(v)}%`;
 
+  function fmtBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+    const val = (bytes / Math.pow(k, i)).toFixed(i === 0 ? 0 : 1);
+    return `${val.replace('.', ',')} ${sizes[i]}`;
+  }
+
   // "1.450,00", "1450.5", "R$ 30" -> número; vazio -> null; inválido -> NaN
   function parseNum(s) {
     if (s == null) return null;
@@ -129,6 +138,6 @@
 
   global.U = {
     parseDate, iso, today, hoje, addDays, diffDays, daysUntil, fmtDate, fmtMonth, fmtMonthLong, ymd, fmtAge, fmtRelative,
-    fmtMoney, fmtNum, fmtKg, fmtPct, parseNum, toInput, ordinal, plural, esc,
+    fmtMoney, fmtNum, fmtKg, fmtPct, fmtBytes, parseNum, toInput, ordinal, plural, esc,
   };
 })(window);

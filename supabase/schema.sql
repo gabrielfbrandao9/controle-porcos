@@ -300,6 +300,23 @@ create table if not exists public.porcos_racoes (
   atualizado_por uuid default auth.uid() references auth.users (id) on delete set null
 );
 
+-- Documentos e arquivos técnicos (SOS Suínos)
+create table if not exists public.porcos_documentos (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null,
+  nome_arquivo text not null,
+  caminho text not null,
+  bucket text not null default 'porcos-documentos',
+  tamanho bigint default 0,
+  tipo_mime text not null default '',
+  categoria text not null default 'manual',
+  obs text not null default '',
+  ordem int not null default 0,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now(),
+  atualizado_por uuid default auth.uid() references auth.users (id) on delete set null
+);
+
 -- Adiciona a coluna grupo_id em todas as tabelas de dados se ainda não tiver
 alter table public.porcos_animais add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
 alter table public.porcos_gestacoes add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
@@ -308,6 +325,7 @@ alter table public.porcos_aplicacoes add column if not exists grupo_id uuid refe
 alter table public.porcos_abates add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
 alter table public.porcos_lancamentos add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
 alter table public.porcos_racoes add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
+alter table public.porcos_documentos add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
 
 -- Índices de grupo
 create index if not exists porcos_animais_grupo_idx on public.porcos_animais (grupo_id);
@@ -317,6 +335,7 @@ create index if not exists porcos_aplicacoes_grupo_idx on public.porcos_aplicaco
 create index if not exists porcos_abates_grupo_idx on public.porcos_abates (grupo_id);
 create index if not exists porcos_lancamentos_grupo_idx on public.porcos_lancamentos (grupo_id);
 create index if not exists porcos_racoes_grupo_idx on public.porcos_racoes (grupo_id);
+create index if not exists porcos_documentos_grupo_idx on public.porcos_documentos (grupo_id);
 
 -- Na tabela de produtos, o nome era único globalmente; agora é único por grupo
 do $$
@@ -361,6 +380,7 @@ begin
   update public.porcos_abates set grupo_id = v_grupo_padrao_id where grupo_id is null;
   update public.porcos_lancamentos set grupo_id = v_grupo_padrao_id where grupo_id is null;
   update public.porcos_racoes set grupo_id = v_grupo_padrao_id where grupo_id is null;
+  update public.porcos_documentos set grupo_id = v_grupo_padrao_id where grupo_id is null;
 end;
 $$;
 
@@ -384,7 +404,7 @@ declare
   t text;
 begin
   foreach t in array array['porcos_animais', 'porcos_gestacoes', 'porcos_produtos', 'porcos_aplicacoes',
-                           'porcos_abates', 'porcos_lancamentos', 'porcos_racoes'] loop
+                           'porcos_abates', 'porcos_lancamentos', 'porcos_racoes', 'porcos_documentos'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from anon', t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
@@ -852,3 +872,29 @@ drop policy if exists "Porcos: apagar bulas" on storage.objects;
 create policy "Porcos: apagar bulas" on storage.objects
   for delete to authenticated
   using (bucket_id = 'porcos-bulas' and exists (select 1 from public.porcos_meus_grupos()));
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('porcos-documentos', 'porcos-documentos', false, 52428800, null)
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Porcos: ver documentos" on storage.objects;
+create policy "Porcos: ver documentos" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'porcos-documentos' and exists (select 1 from public.porcos_meus_grupos()));
+
+drop policy if exists "Porcos: enviar documentos" on storage.objects;
+create policy "Porcos: enviar documentos" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'porcos-documentos' and exists (select 1 from public.porcos_meus_grupos()));
+
+drop policy if exists "Porcos: trocar documentos" on storage.objects;
+create policy "Porcos: trocar documentos" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'porcos-documentos' and exists (select 1 from public.porcos_meus_grupos()))
+  with check (bucket_id = 'porcos-documentos' and exists (select 1 from public.porcos_meus_grupos()));
+
+drop policy if exists "Porcos: apagar documentos" on storage.objects;
+create policy "Porcos: apagar documentos" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'porcos-documentos' and exists (select 1 from public.porcos_meus_grupos()));
