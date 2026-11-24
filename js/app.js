@@ -657,7 +657,7 @@
           </div>
           <div class="dnp-resumo-item">
             <small>Status Hoje</small>
-            <strong>${d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>'}</strong>
+            <strong>${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : (d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>')}</strong>
           </div>
           <div class="dnp-resumo-item">
             <small>Motivo principal</small>
@@ -1692,20 +1692,22 @@
           });
         }
       } else {
-        const dias = diffDays(meta210, dataFim);
-        if (dias > 0) {
-          const ativoHoje = noPlantel(m);
-          itens.push({
-            tipo: 'marra',
-            rotulo: 'Marrã > 210d sem cobertura',
-            badgeCls: 'dnp-marra',
-            dias,
-            periodo: `${fmtDate(meta210)} até ${ativoHoje ? 'hoje' : fmtDate(dataFim)}`,
-            ativoHoje,
-            obs: ativoHoje
-              ? `Completou 210 dias em ${fmtDate(meta210)} e ainda não foi coberta.`
-              : `Completou 210 dias em ${fmtDate(meta210)} e saiu sem cobertura.`,
-          });
+        if (!m.descarte) {
+          const dias = diffDays(meta210, dataFim);
+          if (dias > 0) {
+            const ativoHoje = noPlantel(m);
+            itens.push({
+              tipo: 'marra',
+              rotulo: 'Marrã > 210d sem cobertura',
+              badgeCls: 'dnp-marra',
+              dias,
+              periodo: `${fmtDate(meta210)} até ${ativoHoje ? 'hoje' : fmtDate(dataFim)}`,
+              ativoHoje,
+              obs: ativoHoje
+                ? `Completou 210 dias em ${fmtDate(meta210)} e ainda não foi coberta.`
+                : `Completou 210 dias em ${fmtDate(meta210)} e saiu sem cobertura.`,
+            });
+          }
         }
       }
     }
@@ -1771,9 +1773,9 @@
 
       // 3. Repetição de cio
       if (g.repeticao_cio) {
-        const fimRep = gNext ? gNext.cruzamento : dataFim;
+        const fimRep = gNext ? gNext.cruzamento : (m.descarte ? (m.descarte_data || g.cruzamento) : dataFim);
         const dias = Math.max(0, diffDays(g.cruzamento, fimRep));
-        const ativoHoje = noPlantel(m) && !gNext;
+        const ativoHoje = noPlantel(m) && !gNext && !m.descarte;
         if (dias > 0 || ativoHoje) {
           itens.push({
             tipo: 'cio',
@@ -1782,7 +1784,7 @@
             dias,
             periodo: `${fmtDate(g.cruzamento)} a ${gNext ? fmtDate(fimRep) : (ativoHoje ? 'hoje' : fmtDate(fimRep))}`,
             ativoHoje,
-            obs: `Cobertura em ${fmtDate(g.cruzamento)} não vingou.${gNext ? ` Nova cobertura em ${fmtDate(gNext.cruzamento)}.` : ' Aguardando nova cobertura.'}`,
+            obs: `Cobertura em ${fmtDate(g.cruzamento)} não vingou.${gNext ? ` Nova cobertura em ${fmtDate(gNext.cruzamento)}.` : (m.descarte ? ' Marcada para descarte.' : ' Aguardando nova cobertura.')}`,
           });
         }
       }
@@ -1790,9 +1792,9 @@
       // 4. Aborto
       if (g.aborto) {
         const dataAborto = g.aborto_data || g.parto || addDays(g.cruzamento, 60);
-        const fimAborto = gNext ? gNext.cruzamento : (dataAborto || dataFim);
+        const fimAborto = gNext ? gNext.cruzamento : (m.descarte ? (m.descarte_data || dataAborto) : (dataAborto || dataFim));
         const dias = Math.max(0, diffDays(g.cruzamento, fimAborto));
-        const ativoHoje = noPlantel(m) && !gNext && (!g.aborto_data || diffDays(g.aborto_data, hoje()) > 0);
+        const ativoHoje = noPlantel(m) && !gNext && !m.descarte && (!g.aborto_data || diffDays(g.aborto_data, hoje()) > 0);
         if (dias > 0 || ativoHoje) {
           itens.push({
             tipo: 'aborto',
@@ -1801,50 +1803,30 @@
             dias,
             periodo: `${fmtDate(g.cruzamento)} a ${gNext ? fmtDate(gNext.cruzamento) : fmtDate(dataAborto)}`,
             ativoHoje,
-            obs: `Cobertura em ${fmtDate(g.cruzamento)}, aborto registrado em ${fmtDate(dataAborto)}.`,
+            obs: `Cobertura em ${fmtDate(g.cruzamento)}, aborto registrado em ${fmtDate(dataAborto)}.${m.descarte ? ' Marcada para descarte.' : ''}`,
           });
         }
       }
     }
 
-    // 6. Atraso no descarte (gera DNP da decisão até a saída física)
+    // Fêmea na situação "Aguardando descarte" não gera DNP nem acumula novos dias improdutivos
     if (m.descarte) {
-      let dataDecisao = m.descarte_data;
-      if (!dataDecisao) {
-        const ultG = [...gs].reverse().find((g) => g.vivos != null);
-        dataDecisao = ultG ? (ultG.desmame || addDays(partoDe(ultG), DESMAME_DIAS)) : (m.chegada || m.nascimento || hoje());
-      }
-      const fimDescarte = m.saida && m.saida_data ? m.saida_data : hoje();
-      const dias = Math.max(0, diffDays(dataDecisao, fimDescarte));
-      const ativoHoje = noPlantel(m);
-      if (dias > 0 || ativoHoje) {
-        itens.push({
-          tipo: 'descarte',
-          rotulo: 'Aguardando descarte (saída física)',
-          badgeCls: 'dnp-descarte',
-          dias,
-          periodo: `${fmtDate(dataDecisao)} até ${ativoHoje ? 'hoje' : fmtDate(fimDescarte)}`,
-          ativoHoje,
-          obs: ativoHoje
-            ? `Decisão de descarte em ${fmtDate(dataDecisao)}. Fêmea ainda não teve saída física (abate/venda).`
-            : `Decisão de descarte em ${fmtDate(dataDecisao)}, saída física em ${fmtDate(m.saida_data)}.`,
-        });
-      }
+      itens.forEach((it) => { it.ativoHoje = false; });
     }
 
     const totalDnp = itens.reduce((s, it) => s + it.dias, 0);
-    const dnpHoje = itens.some((it) => it.ativoHoje);
+    const dnpHoje = !m.descarte && itens.some((it) => it.ativoHoje);
 
-    let motivoPrincipal = 'Sem DNP acumulado';
-    let motivoBadgeCls = 'dnp-ok';
+    let motivoPrincipal = m.descarte && noPlantel(m) ? 'Aguardando descarte (sem DNP)' : 'Sem DNP acumulado';
+    let motivoBadgeCls = m.descarte && noPlantel(m) ? 'dnp-descarte' : 'dnp-ok';
     const ativoItem = itens.find((it) => it.ativoHoje);
     if (ativoItem) {
       motivoPrincipal = ativoItem.rotulo;
       motivoBadgeCls = ativoItem.badgeCls;
     } else if (itens.length > 0) {
       const maior = [...itens].sort((a, b) => b.dias - a.dias)[0];
-      motivoPrincipal = maior.rotulo;
-      motivoBadgeCls = maior.badgeCls;
+      motivoPrincipal = m.descarte && noPlantel(m) ? `${maior.rotulo} (Aguardando descarte)` : maior.rotulo;
+      motivoBadgeCls = m.descarte && noPlantel(m) ? 'dnp-descarte' : maior.badgeCls;
     }
 
     return {
@@ -1864,13 +1846,17 @@
     const totalDnp = matrizesDnp.reduce((s, d) => s + d.totalDnp, 0);
     const matrizesNoPlantel = matrizesDnp.filter((d) => noPlantel(d.animal));
     const gerandoHoje = matrizesDnp.filter((d) => d.dnpHoje);
-    const mediaPlantel = matrizesNoPlantel.length ? Math.round((matrizesNoPlantel.reduce((s, d) => s + d.totalDnp, 0) / matrizesNoPlantel.length) * 10) / 10 : 0;
+    // Média geral do plantel exclui fêmeas com status "Aguardando descarte"
+    const matrizesProdutivas = matrizesNoPlantel.filter((d) => !d.animal.descarte);
+    const baseMedia = matrizesProdutivas.length ? matrizesProdutivas : matrizesNoPlantel;
+    const mediaPlantel = baseMedia.length ? Math.round((baseMedia.reduce((s, d) => s + d.totalDnp, 0) / baseMedia.length) * 10) / 10 : 0;
 
     return {
       femeas,
       matrizesDnp,
       totalDnp,
       matrizesNoPlantel,
+      matrizesProdutivas,
       gerandoHoje,
       mediaPlantel,
     };
@@ -1880,7 +1866,13 @@
     const p = calcularDnpPlantel();
     const f = filters.dnp || 'todos';
 
-    const cardMedia = stat('DNP Médio do Plantel', `${fmtNum(p.mediaPlantel)} dias`, 'Média por matriz no plantel');
+    const cardMedia = stat(
+      'DNP Médio do Plantel',
+      `${fmtNum(p.mediaPlantel)} dias`,
+      p.matrizesProdutivas && p.matrizesProdutivas.length !== p.matrizesNoPlantel.length
+        ? `Média das ${p.matrizesProdutivas.length} matrizes produtivas (exclui descarte)`
+        : 'Média por matriz produtiva no plantel'
+    );
     const cardTotal = stat('Total DNP Acumulado', `${fmtNum(p.totalDnp)} dias`, `${plural(p.femeas.length, 'matriz avaliada', 'matrizes avaliadas')}`);
     const cardHoje = stat('Gerando DNP Hoje', `${p.gerandoHoje.length}`, p.gerandoHoje.length === 1 ? '1 matriz com DNP ativo' : `${p.gerandoHoje.length} matrizes com DNP ativo`, p.gerandoHoje.length ? 'warn' : 'pos');
 
@@ -1944,7 +1936,7 @@
             <span class="badge ${d.motivoBadgeCls}">${esc(d.motivoPrincipal)}</span>
           </td>
           <td>
-            ${d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>'}
+            ${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : (d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>')}
           </td>
           <td style="text-align:right;">
             <button type="button" class="btn small" data-act="dnp-detalhes" data-id="${a.id}">${ICON.eye} Detalhes</button>
@@ -2029,7 +2021,7 @@
         </div>
         <div class="dnp-resumo-item">
           <small>Status Hoje</small>
-          <strong>${dnp.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>'}</strong>
+          <strong>${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : (dnp.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>')}</strong>
         </div>
         <div class="dnp-resumo-item">
           <small>Motivo Principal</small>
@@ -2745,7 +2737,7 @@
         { name: 'chegada', label: 'Chegada', type: 'date', half: true, showIf: (v) => v.aquisicao !== 'nascido' },
         { name: 'negociado_com', label: 'Negociado com', half: true, showIf: (v) => v.aquisicao !== 'nascido', placeholder: 'Pessoa' },
         { name: 'valor_compra', label: 'Valor de compra', type: 'money', half: true, showIf: (v) => v.aquisicao === 'comprado' },
-        { name: 'descarte', label: 'Marcada para descarte (gera DNP até a saída física)', type: 'checkbox', showIf: (v) => v.categoria === 'matriz' || v.categoria === 'marra' || v.categoria === 'porca' },
+        { name: 'descarte', label: 'Marcada para descarte (não gera DNP / aguarda saída física)', type: 'checkbox', showIf: (v) => v.categoria === 'matriz' || v.categoria === 'marra' || v.categoria === 'porca' },
         { name: 'saida', label: 'Situação', type: 'select', options: [['', 'No plantel'], ['venda', 'Vendido'], ['abate', 'Abatido'], ['morte', 'Morreu']] },
         { name: 'saida_data', label: 'Data da saída', type: 'date', half: true, required: true, showIf: (v) => !!v.saida },
         { name: 'valor_venda', label: 'Valor da venda', type: 'money', half: true, showIf: (v) => v.saida === 'venda' },
