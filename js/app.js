@@ -2126,18 +2126,22 @@
     $('#dnpDlgMeta').textContent = `${CATEGORIAS[a.categoria]} · ${a.descarte && noPlantel(a) ? 'Aguardando descarte' : statusAnimal(a)}`;
 
     let html = `
-      <div class="dnp-resumo-banner">
+      <div class="dnp-resumo-banner max-w-full box-border">
         <div class="dnp-resumo-item">
           <small>Total DNP</small>
           <strong class="${dnp.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${dnp.totalDnp} ${dnp.totalDnp === 1 ? 'dia' : 'dias'}</strong>
         </div>
         <div class="dnp-resumo-item">
           <small>Status Hoje</small>
-          <strong>${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : (dnp.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>')}</strong>
+          <div class="dnp-resumo-badge-wrap">
+            ${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : (dnp.dnpHoje ? '<span class="badge dnp-ativo">⚠️ DNP ativo hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>')}
+          </div>
         </div>
         <div class="dnp-resumo-item">
           <small>Motivo Principal</small>
-          <strong><span class="badge ${dnp.motivoBadgeCls}">${esc(dnp.motivoPrincipal)}</span></strong>
+          <div class="dnp-resumo-badge-wrap">
+            <span class="badge ${dnp.motivoBadgeCls}">${esc(dnp.motivoPrincipal)}</span>
+          </div>
         </div>
       </div>
     `;
@@ -2146,28 +2150,48 @@
     if (!dnp.itens.length) {
       html += '<p class="muted">Nenhum dia não produtivo registrado para esta matriz.</p>';
     } else {
-      html += `<div class="dnp-lista">${dnp.itens.map((it) => `
-        <div class="dnp-item${it.ativoHoje ? ' ativo-hoje' : ''}">
-          <div class="dnp-item-head">
-            <span class="dnp-item-motivo"><span class="badge ${it.badgeCls}">${esc(it.rotulo)}</span>${it.ativoHoje ? '<span class="badge dnp-ativo">Gerando DNP hoje</span>' : ''}</span>
-            <span class="dnp-item-dias">${plural(it.dias, 'dia', 'dias')}</span>
+      html += `<div class="dnp-lista max-w-full">${dnp.itens.map((it) => `
+        <div class="dnp-item${it.ativoHoje ? ' ativo-hoje' : ''} max-w-full box-border">
+          <div class="dnp-item-top">
+            <div class="dnp-item-desc flex-1 min-w-0">
+              <span class="badge ${it.badgeCls} dnp-evento-badge">${esc(it.rotulo)}</span>
+            </div>
+            <div class="dnp-item-status shrink-0">
+              ${it.ativoHoje ? '<span class="badge dnp-ativo">⚠️ Ativo hoje</span>' : '<span class="badge dnp-ok">Encerrado</span>'}
+            </div>
           </div>
-          <div class="dnp-item-periodo">Período: <strong>${esc(it.periodo)}</strong></div>
-          ${it.obs ? `<div class="dnp-item-obs muted">${esc(it.obs)}</div>` : ''}
+          <div class="dnp-item-base">
+            <div class="dnp-item-metas">
+              <span class="dnp-item-dias ${it.ativoHoje ? 'danger-text' : ''}"><strong>${plural(it.dias, 'dia', 'dias')}</strong></span>
+              <span class="dnp-item-sep">·</span>
+              <span class="dnp-item-periodo">Período: ${esc(it.periodo)}</span>
+            </div>
+            ${it.obs ? `<div class="dnp-item-obs muted">${esc(it.obs)}</div>` : ''}
+          </div>
         </div>
       `).join('')}</div>`;
     }
 
     if (dnp.intervalosParto.length) {
-      html += `<h3 class="dnp-secao-titulo" style="margin-top: 10px;">${ICON.pig} Intervalo de Partos (IP > 140 dias)</h3>
-      <div class="dnp-lista">${dnp.intervalosParto.map((ip) => `
-        <div class="dnp-item">
-          <div class="dnp-item-head">
-            <span class="dnp-item-motivo"><span class="badge dnp-ip">${esc(ip.obs)}</span></span>
-            <span class="dnp-item-dias">${ip.ip} dias (${ip.excesso}d acima da meta)</span>
+      html += `<h3 class="dnp-secao-titulo" style="margin-top: 14px;">${ICON.pig} Intervalo de Partos (IP > 140 dias)</h3>
+      <div class="dnp-lista max-w-full">${dnp.intervalosParto.map((ip) => `
+        <div class="dnp-item max-w-full box-border">
+          <div class="dnp-item-top">
+            <div class="dnp-item-desc flex-1 min-w-0">
+              <span class="badge dnp-ip dnp-evento-badge">${esc(ip.obs)}</span>
+            </div>
+            <div class="dnp-item-status shrink-0">
+              <span class="badge warn">+${ip.excesso}d acima</span>
+            </div>
           </div>
-          <div class="dnp-item-periodo">Partos: <strong>${esc(ip.periodo)}</strong></div>
-          <div class="dnp-item-obs muted">Meta recomendada: ~140 dias entre partos. O excesso de ${ip.excesso} dias reduz a eficiência reprodutiva do ciclo.</div>
+          <div class="dnp-item-base">
+            <div class="dnp-item-metas">
+              <span class="dnp-item-dias danger-text"><strong>${ip.ip} dias</strong></span>
+              <span class="dnp-item-sep">·</span>
+              <span class="dnp-item-periodo">Partos: ${esc(ip.periodo)}</span>
+            </div>
+            <div class="dnp-item-obs muted">Meta recomendada: ~140 dias entre partos. O excesso de ${ip.excesso} dias reduz a eficiência reprodutiva do ciclo.</div>
+          </div>
         </div>
       `).join('')}</div>`;
     }
