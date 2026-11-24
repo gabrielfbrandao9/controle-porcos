@@ -131,12 +131,41 @@
     },
 
     async insert(kind, rows, grupoId) {
-      const payload = grupoId ? rows.map((r) => ({ ...r, grupo_id: r.grupo_id || grupoId })) : rows;
-      return check(await client.from(TABLES[kind]).insert(payload).select());
+      let payload = grupoId ? rows.map((r) => ({ ...r, grupo_id: r.grupo_id || grupoId })) : rows;
+      while (true) {
+        try {
+          return check(await client.from(TABLES[kind]).insert(payload).select());
+        } catch (err) {
+          if (/schema cache|could not find.*column/i.test(err.message || '')) {
+            const m = (err.message || '').match(/Could not find the '([^']+)' column/i);
+            if (m && m[1] && payload.some((r) => m[1] in r)) {
+              console.warn(`Coluna '${m[1]}' ausente no schema Supabase. Inserindo sem ela.`);
+              payload = payload.map((r) => { const c = { ...r }; delete c[m[1]]; return c; });
+              continue;
+            }
+          }
+          throw err;
+        }
+      }
     },
 
     async update(kind, id, patch) {
-      return check(await client.from(TABLES[kind]).update(patch).eq('id', id).select().single());
+      let currentPatch = { ...patch };
+      while (true) {
+        try {
+          return check(await client.from(TABLES[kind]).update(currentPatch).eq('id', id).select().single());
+        } catch (err) {
+          if (/schema cache|could not find.*column/i.test(err.message || '')) {
+            const m = (err.message || '').match(/Could not find the '([^']+)' column/i);
+            if (m && m[1] && m[1] in currentPatch) {
+              console.warn(`Coluna '${m[1]}' ausente no schema Supabase. Atualizando sem ela.`);
+              delete currentPatch[m[1]];
+              continue;
+            }
+          }
+          throw err;
+        }
+      }
     },
 
     async remove(kind, id) {
@@ -145,7 +174,23 @@
 
     // Alteração feita sem internet: não falha se o registro já foi apagado em outro aparelho
     async updateSeExistir(kind, id, patch) {
-      check(await client.from(TABLES[kind]).update(patch).eq('id', id));
+      let currentPatch = { ...patch };
+      while (true) {
+        try {
+          check(await client.from(TABLES[kind]).update(currentPatch).eq('id', id));
+          return;
+        } catch (err) {
+          if (/schema cache|could not find.*column/i.test(err.message || '')) {
+            const m = (err.message || '').match(/Could not find the '([^']+)' column/i);
+            if (m && m[1] && m[1] in currentPatch) {
+              console.warn(`Coluna '${m[1]}' ausente no schema Supabase. Removendo do payload.`);
+              delete currentPatch[m[1]];
+              continue;
+            }
+          }
+          throw err;
+        }
+      }
     },
 
     // ---------- Restaurar cópia (em lotes) ----------
@@ -153,7 +198,20 @@
     async upsertMany(kind, rows, grupoId) {
       const payload = grupoId ? rows.map((r) => ({ ...r, grupo_id: r.grupo_id || grupoId })) : rows;
       for (let i = 0; i < payload.length; i += 500) {
-        check(await client.from(TABLES[kind]).upsert(payload.slice(i, i + 500)));
+        const slice = payload.slice(i, i + 500);
+        try {
+          check(await client.from(TABLES[kind]).upsert(slice));
+        } catch (err) {
+          if (/schema cache|could not find.*column/i.test(err.message || '')) {
+            const m = (err.message || '').match(/Could not find the '([^']+)' column/i);
+            if (m && m[1]) {
+              const fallback = slice.map((r) => { const c = { ...r }; delete c[m[1]]; return c; });
+              check(await client.from(TABLES[kind]).upsert(fallback));
+              continue;
+            }
+          }
+          throw err;
+        }
       }
     },
 

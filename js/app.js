@@ -36,6 +36,59 @@
     ['marra', 'Marrã'],
     ['cevado', 'Cevado'],
   ];
+
+  function padronizarNomeAnimal(nome, categoria) {
+    if (!nome || typeof nome !== 'string') return nome || '';
+    if (!/porc[oa]/i.test(nome)) return nome;
+    let targetTerm = null;
+    const cat = (categoria || '').toLowerCase();
+    if (cat === 'marra' || cat === 'porca' || cat === 'matriz') targetTerm = 'Marrã';
+    else if (cat === 'cevado' || cat === 'porco' || cat === 'barrao') targetTerm = 'Cevado';
+
+    return nome.replace(/\bporc([oa])(s)?\b/gi, (match, vogal, pluralSuffix) => {
+      const isPlural = !!pluralSuffix;
+      const base = targetTerm || (vogal.toLowerCase() === 'a' ? 'Marrã' : 'Cevado');
+      let result = base;
+      if (isPlural) result = base === 'Marrã' ? 'Marrãs' : 'Cevados';
+      if (match === match.toUpperCase()) return result.toUpperCase();
+      if (match[0] === match[0].toLowerCase()) return result.toLowerCase();
+      return result;
+    });
+  }
+
+  function padronizarAnimais(animais) {
+    if (!Array.isArray(animais)) return;
+    for (const a of animais) {
+      if (a && a.nome) {
+        a.nome = padronizarNomeAnimal(a.nome, a.categoria);
+      }
+      if (a && a.categoria) {
+        if (a.categoria === 'porca') a.categoria = 'marra';
+        else if (a.categoria === 'porco') a.categoria = 'cevado';
+      }
+    }
+  }
+
+  async function sincronizarNomesAnimais() {
+    if (!db || !Array.isArray(db.animais)) return;
+    padronizarAnimais(db.animais);
+    if (!canEdit()) return;
+    const paraAtualizar = [];
+    for (const a of db.animais) {
+      const nomePadrao = padronizarNomeAnimal(a.nome, a.categoria);
+      const catPadrao = a.categoria === 'porca' ? 'marra' : (a.categoria === 'porco' ? 'cevado' : a.categoria);
+      if (nomePadrao !== a.nome || catPadrao !== a.categoria) {
+        paraAtualizar.push({ id: a.id, patch: { nome: nomePadrao, categoria: catPadrao } });
+      }
+    }
+    for (const item of paraAtualizar) {
+      try {
+        await Cloud.updateSeExistir('animais', item.id, item.patch);
+      } catch (err) {
+        console.warn('Erro ao sincronizar nome de animal:', err);
+      }
+    }
+  }
   const AQUISICAO = { nascido: 'Nascido no local', comprado: 'Comprado', ganhado: 'Ganhado' };
   const SAIDAS = { venda: ['Vendido', 'Vendida'], abate: ['Abatido', 'Abatida'], morte: ['Morto', 'Morta'] };
   const SAIDA_FILTRO = { venda: 'Vendidos', abate: 'Abatidos', morte: 'Mortos' };
@@ -55,6 +108,7 @@
   };
   const PAPEIS = { dono: 'Dono', editor: 'Pode editar', leitor: 'Só ver' };
   const GESTACAO_DIAS = 114;
+  const DESMAME_DIAS = 45;
   const AVISO_DIAS = 15;
 
   const ICON = {
@@ -126,10 +180,17 @@
   // ---------- Consultas nos dados ----------
 
   const byId = (kind, id) => db[kind].find((x) => x.id === id) || null;
-  const animal = (id) => byId('animais', id);
+  const animal = (id) => {
+    const a = byId('animais', id);
+    if (a && a.nome) a.nome = padronizarNomeAnimal(a.nome, a.categoria);
+    return a;
+  };
   const produto = (id) => byId('produtos', id);
   const noPlantel = (a) => !a.saida;
-  const nomeAnimal = (id) => (animal(id) || {}).nome || '—';
+  const nomeAnimal = (id) => {
+    const a = animal(id);
+    return a ? padronizarNomeAnimal(a.nome, a.categoria) : '—';
+  };
 
   const sortAnimais = (list) => [...list].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'));
   const sortByDate = (list, key = 'data', desc = false) => [...list].sort((a, b) => (desc ? -1 : 1) * String(a[key] || '').localeCompare(String(b[key] || '')));
@@ -584,7 +645,6 @@
     let dnpSecHtml = '';
     if (a.categoria === 'matriz' || a.categoria === 'marra' || a.categoria === 'porca') {
       const d = calcularDnpMatriz(a);
-      const custo = obterDnpCusto();
       dnpSecHtml = `<section class="section card">
         <div class="section-head">
           <h2>Dias Não Produtivos (DNP)</h2>
@@ -594,10 +654,6 @@
           <div class="dnp-resumo-item">
             <small>Total DNP</small>
             <strong class="${d.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${d.totalDnp} dias</strong>
-          </div>
-          <div class="dnp-resumo-item">
-            <small>Prejuízo estimado</small>
-            <strong class="${d.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${fmtMoney(d.totalDnp * custo)}</strong>
           </div>
           <div class="dnp-resumo-item">
             <small>Status Hoje</small>
@@ -622,9 +678,18 @@
             ${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : ''}</p>
           ${(() => {
             const g = a.gestacao_id && byId('gestacoes', a.gestacao_id);
-            return g ? `<p class="cria-de">Cria da <a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a>${g.barrao_id
+            if (!g) return '';
+            const parto = partoDe(g);
+            const dataDesmame = g.desmame || (parto ? addDays(parto, DESMAME_DIAS) : null);
+            let desmameTxt = '';
+            if (dataDesmame) {
+              const idadeD = parto ? diffDays(parto, dataDesmame) : null;
+              const idadeTxt = idadeD != null && idadeD >= 0 ? ` (${plural(idadeD, 'dia', 'dias')})` : '';
+              desmameTxt = ` · desmame ${g.desmame ? '' : 'previsto '}${fmtDate(dataDesmame)}${idadeTxt}`;
+            }
+            return `<p class="cria-de">Cria da <a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a>${g.barrao_id
                 ? ` e do <a href="#/animal/${g.barrao_id}">${esc(nomeAnimal(g.barrao_id))}</a>` : ''}
-              · ${ordinal(numeroGestacao(g))} gestação, parto em ${esc(fmtDate(partoDe(g)))}</p>` : '';
+              · ${ordinal(numeroGestacao(g))} gestação, parto em ${esc(fmtDate(parto))}${desmameTxt}</p>`;
           })()}
           <dl class="info">${info.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
           ${a.obs ? `<p class="obs">${esc(a.obs)}</p>` : ''}
@@ -716,9 +781,10 @@
           linhas.push(['Idade no desmame', idadeDesmame >= 0 ? plural(idadeDesmame, 'dia', 'dias') : '—']);
         }
       } else if (parto) {
-        const desmamePrevisto = addDays(parto, 28);
+        const desmamePrevisto = addDays(parto, DESMAME_DIAS);
         linhas.push(['Desmame previsto', fmtDate(desmamePrevisto)]);
-        linhas.push(['Idade no desmame', '28 dias (previsto)']);
+        const idadePrevista = diffDays(parto, desmamePrevisto);
+        linhas.push(['Idade no desmame', `${plural(idadePrevista, 'dia', 'dias')} (previsto)`]);
       }
     }
     return `<article class="cria card">
@@ -916,7 +982,7 @@
         if (parsed && typeof parsed === 'object') return parsed;
       }
     } catch {}
-    return { cintura: '1,27', comprimento: '1,02', animalId: '' };
+    return { cintura: '1,27', comprimento: '1,02' };
   }
 
   function salvarPesoMedidas(m) {
@@ -1004,10 +1070,7 @@
   function renderPesoSemBalanca(switcherHtml = '') {
     const formula = obterPesoFormula();
     const medidas = obterPesoMedidas();
-    const animalObj = medidas.animalId ? animal(medidas.animalId) : null;
     const res = calcularPesoEstimado(medidas.cintura, medidas.comprimento, formula);
-
-    const ativos = db.animais.filter((a) => !a.descarte && !a.morte);
 
     const configPanelHtml = pesoEditandoFormula ? `
       <div class="peso-config-panel">
@@ -1045,7 +1108,7 @@
       ${configPanelHtml}
 
       <div class="peso-grid">
-        <!-- Coluna 1: Entradas de medidas e animal -->
+        <!-- Coluna 1: Entradas de medidas -->
         <div class="peso-card">
           <div class="peso-card-header">
             <h2>📏 Medidas do Animal</h2>
@@ -1053,14 +1116,6 @@
               ⚙️ ${pesoEditandoFormula ? 'Ocultar Fórmula' : 'Editar Fórmula'}
             </button>
           </div>
-
-          <label class="peso-field">
-            <span>Vincular a um animal (opcional)</span>
-            <select id="pesoAnimalSelect">
-              <option value="">-- Animal avulso / Não vinculado --</option>
-              ${ativos.map((a) => `<option value="${esc(a.id)}"${medidas.animalId === a.id ? ' selected' : ''}>${esc(a.brinco || a.nome || 'Sem id')} · ${esc(a.categoria || 'Geral')}${a.lote ? ` (Lote: ${esc(a.lote)})` : ''}</option>`).join('')}
-            </select>
-          </label>
 
           <div class="peso-field">
             <label for="pesoCintura">
@@ -1099,7 +1154,7 @@
           </div>
 
           <div id="pesoResultadoBox" style="display: flex; flex-direction: column; gap: 16px;">
-            ${renderPesoResultadoHtml(res, animalObj)}
+            ${renderPesoResultadoHtml(res)}
           </div>
         </div>
       </div>
@@ -1139,13 +1194,11 @@
   function atualizarCalculoPeso() {
     const cEl = $('#pesoCintura');
     const lEl = $('#pesoComprimento');
-    const animEl = $('#pesoAnimalSelect');
     if (!cEl || !lEl) return;
 
     const medidas = {
       cintura: cEl.value,
       comprimento: lEl.value,
-      animalId: animEl ? animEl.value : '',
     };
     salvarPesoMedidas(medidas);
 
@@ -1153,7 +1206,7 @@
     const res = calcularPesoEstimado(medidas.cintura, medidas.comprimento, formula);
     const box = $('#pesoResultadoBox');
     if (box) {
-      box.innerHTML = renderPesoResultadoHtml(res, medidas.animalId ? animal(medidas.animalId) : null);
+      box.innerHTML = renderPesoResultadoHtml(res);
     }
   }
 
@@ -1615,19 +1668,6 @@
 
   // ---------- DNP (Dias Não Produtivos) ----------
 
-  const DNP_CUSTO_KEY = 'porcos:dnp_custo';
-  function obterDnpCusto() {
-    try {
-      const v = parseFloat(localStorage.getItem(DNP_CUSTO_KEY));
-      return Number.isFinite(v) && v >= 0 ? v : 15;
-    } catch (e) {
-      return 15;
-    }
-  }
-  function salvarDnpCusto(v) {
-    try { localStorage.setItem(DNP_CUSTO_KEY, String(v)); } catch (e) {}
-  }
-
   function calcularDnpMatriz(m) {
     const gs = gestacoesDe(m.id);
     const dataFim = noPlantel(m) ? hoje() : (m.saida_data || hoje());
@@ -1677,7 +1717,7 @@
 
       if (g.vivos != null) {
         const parto = partoDe(g);
-        const desmame = g.desmame || addDays(parto, 28);
+        const desmame = g.desmame || addDays(parto, DESMAME_DIAS);
         const tolerancia = addDays(desmame, 4);
 
         if (gNext) {
@@ -1772,7 +1812,7 @@
       let dataDecisao = m.descarte_data;
       if (!dataDecisao) {
         const ultG = [...gs].reverse().find((g) => g.vivos != null);
-        dataDecisao = ultG ? (ultG.desmame || addDays(partoDe(ultG), 28)) : (m.chegada || m.nascimento || hoje());
+        dataDecisao = ultG ? (ultG.desmame || addDays(partoDe(ultG), DESMAME_DIAS)) : (m.chegada || m.nascimento || hoje());
       }
       const fimDescarte = m.saida && m.saida_data ? m.saida_data : hoje();
       const dias = Math.max(0, diffDays(dataDecisao, fimDescarte));
@@ -1824,8 +1864,6 @@
     const totalDnp = matrizesDnp.reduce((s, d) => s + d.totalDnp, 0);
     const matrizesNoPlantel = matrizesDnp.filter((d) => noPlantel(d.animal));
     const gerandoHoje = matrizesDnp.filter((d) => d.dnpHoje);
-    const custoDia = obterDnpCusto();
-    const prejuizoTotal = totalDnp * custoDia;
     const mediaPlantel = matrizesNoPlantel.length ? Math.round((matrizesNoPlantel.reduce((s, d) => s + d.totalDnp, 0) / matrizesNoPlantel.length) * 10) / 10 : 0;
 
     return {
@@ -1834,33 +1872,17 @@
       totalDnp,
       matrizesNoPlantel,
       gerandoHoje,
-      custoDia,
-      prejuizoTotal,
       mediaPlantel,
     };
   }
 
   function renderDnp() {
     const p = calcularDnpPlantel();
-    const custo = p.custoDia;
     const f = filters.dnp || 'todos';
 
     const cardMedia = stat('DNP Médio do Plantel', `${fmtNum(p.mediaPlantel)} dias`, 'Média por matriz no plantel');
     const cardTotal = stat('Total DNP Acumulado', `${fmtNum(p.totalDnp)} dias`, `${plural(p.femeas.length, 'matriz avaliada', 'matrizes avaliadas')}`);
-    const cardPrejuizo = stat('Prejuízo Estimado', fmtMoney(p.prejuizoTotal), `Base: ${fmtMoney(custo)}/dia improdutivo`, p.prejuizoTotal > 0 ? 'neg' : 'pos');
-
-    const custoBarHtml = `
-      <div class="dnp-custo-bar">
-        <div class="dnp-custo-info">
-          <strong>Custo por dia improdutivo (R$/dia)</strong>
-          <small class="muted">Configuração para estimar prejuízo diário com alimentação e manutenção sem produção.</small>
-        </div>
-        <div class="dnp-custo-controls">
-          <span class="input-affix"><i>R$</i><input type="text" id="inputDnpCusto" value="${esc(toInput(custo))}" inputmode="decimal" autocomplete="off" aria-label="Custo por dia"><i>/dia</i></span>
-          <button type="button" class="btn small primary" data-act="dnp-salvar-custo">Salvar custo</button>
-        </div>
-      </div>
-    `;
+    const cardHoje = stat('Gerando DNP Hoje', `${p.gerandoHoje.length}`, p.gerandoHoje.length === 1 ? '1 matriz com DNP ativo' : `${p.gerandoHoje.length} matrizes com DNP ativo`, p.gerandoHoje.length ? 'warn' : 'pos');
 
     const alertaHtml = p.gerandoHoje.length ? `
       <div class="dnp-alerta-box">
@@ -1900,7 +1922,6 @@
       const a = d.animal;
       const sit = noPlantel(a) ? (a.descarte ? 'descarte' : 'plantel') : (a.saida || 'saiu');
       const buscaStr = normBusca([a.nome, d.motivoPrincipal, statusAnimal(a), a.descarte ? 'descarte' : '', d.dnpHoje ? 'hoje gerando' : ''].join(' '));
-      const prej = d.totalDnp * custo;
 
       return `
         <tr class="dnp-row" data-id="${a.id}" data-sit="${sit}" data-hoje="${d.dnpHoje ? '1' : '0'}" data-dnp="${d.totalDnp > 0 ? '1' : '0'}" data-busca="${esc(buscaStr)}">
@@ -1918,9 +1939,6 @@
           </td>
           <td>
             <div class="dnp-dias-destaque${d.totalDnp > 0 ? ' com-dnp' : ''}">${d.totalDnp} ${d.totalDnp === 1 ? 'dia' : 'dias'}</div>
-          </td>
-          <td class="num">
-            <span class="${prej > 0 ? 'danger-text' : 'muted'}">${fmtMoney(prej)}</span>
           </td>
           <td>
             <span class="badge ${d.motivoBadgeCls}">${esc(d.motivoPrincipal)}</span>
@@ -1943,7 +1961,6 @@
               <th>Matriz</th>
               <th>Situação</th>
               <th>DNP Total</th>
-              <th class="num">Prejuízo Est.</th>
               <th>Motivo Principal</th>
               <th>Status Hoje</th>
               <th style="text-align:right;">Ações</th>
@@ -1958,9 +1975,8 @@
     `;
 
     return `
-      ${pageHead('Dias Não Produtivos (DNP)', 'Manejo reprodutivo, dias improdutivos acumulados e prejuízo estimado do plantel.')}
-      <div class="stats">${cardMedia}${cardTotal}${cardPrejuizo}</div>
-      ${custoBarHtml}
+      ${pageHead('Dias Não Produtivos (DNP)', 'Manejo reprodutivo, intervalos entre partos e dias improdutivos acumulados do plantel.')}
+      <div class="stats">${cardMedia}${cardTotal}${cardHoje}</div>
       ${alertaHtml}
       ${chipsHtml}
       ${buscaHtml}
@@ -1999,24 +2015,17 @@
     const a = animal(id);
     if (!a) return;
     const dnp = calcularDnpMatriz(a);
-    const custo = obterDnpCusto();
     const dlg = $('#dnpDlg');
     if (!dlg) return;
 
     $('#dnpDlgTitle').textContent = `DNP: ${a.nome}`;
     $('#dnpDlgMeta').textContent = `${CATEGORIAS[a.categoria]} · ${a.descarte && noPlantel(a) ? 'Aguardando descarte' : statusAnimal(a)}`;
 
-    const prej = dnp.totalDnp * custo;
-
     let html = `
       <div class="dnp-resumo-banner">
         <div class="dnp-resumo-item">
           <small>Total DNP</small>
           <strong class="${dnp.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${dnp.totalDnp} ${dnp.totalDnp === 1 ? 'dia' : 'dias'}</strong>
-        </div>
-        <div class="dnp-resumo-item">
-          <small>Prejuízo Estimado</small>
-          <strong class="${prej > 0 ? 'danger-text' : 'pos-text'}">${fmtMoney(prej)}</strong>
         </div>
         <div class="dnp-resumo-item">
           <small>Status Hoje</small>
@@ -2037,7 +2046,7 @@
         <div class="dnp-item${it.ativoHoje ? ' ativo-hoje' : ''}">
           <div class="dnp-item-head">
             <span class="dnp-item-motivo"><span class="badge ${it.badgeCls}">${esc(it.rotulo)}</span>${it.ativoHoje ? '<span class="badge dnp-ativo">Gerando DNP hoje</span>' : ''}</span>
-            <span class="dnp-item-dias">${plural(it.dias, 'dia', 'dias')} (${fmtMoney(it.dias * custo)})</span>
+            <span class="dnp-item-dias">${plural(it.dias, 'dia', 'dias')}</span>
           </div>
           <div class="dnp-item-periodo">Período: <strong>${esc(it.periodo)}</strong></div>
           ${it.obs ? `<div class="dnp-item-obs muted">${esc(it.obs)}</div>` : ''}
@@ -2333,6 +2342,7 @@
       lerFila();
       if (fila.length) await enviarFila();
       db = await Cloud.loadAll(grupoAtivo.id);
+      sincronizarNomesAnimais();
       loadedAt = Date.now();
       offline = false;
       await refreshFotos();
@@ -2639,6 +2649,8 @@
         if (!semRede(err)) {
           if (err && (err.code === '42P01' || /relation.*does not exist/i.test(err.message || ''))) {
             console.warn(`Tabela ${kind} ainda não criada no Supabase. Salvando localmente.`);
+          } else if (err && /schema cache|could not find.*column/i.test(err.message || '')) {
+            console.warn(`Coluna ausente no schema cache do Supabase. Salvando localmente.`);
           } else {
             throw err;
           }
@@ -2721,8 +2733,8 @@
     // Gestações já nascidas, das mais recentes para as mais antigas (um animal não pode ser cria dele mesmo)
     const gestacoes = sortByDate(db.gestacoes.filter((g) => g.vivos != null && (!a || g.matriz_id !== a.id)), 'parto', true);
     openForm({
-      title: novo ? 'Novo animal' : `Editar ${a.nome}`,
-      values: a ? { ...a, saida: a.saida || '', descarte: !!a.descarte, descarte_data: a.descarte_data || '' } : { categoria: 'cevado', aquisicao: 'nascido', saida: '', descarte: false, descarte_data: '' },
+      title: novo ? 'Novo animal' : `Editar ${padronizarNomeAnimal(a.nome, a.categoria)}`,
+      values: a ? { ...a, nome: padronizarNomeAnimal(a.nome, a.categoria), saida: a.saida || '', descarte: !!a.descarte } : { categoria: 'cevado', aquisicao: 'nascido', saida: '', descarte: false },
       fields: [
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Pintada' },
         { name: 'categoria', label: 'Categoria', type: 'select', half: true, options: CATEGORIAS_FORM },
@@ -2734,7 +2746,6 @@
         { name: 'negociado_com', label: 'Negociado com', half: true, showIf: (v) => v.aquisicao !== 'nascido', placeholder: 'Pessoa' },
         { name: 'valor_compra', label: 'Valor de compra', type: 'money', half: true, showIf: (v) => v.aquisicao === 'comprado' },
         { name: 'descarte', label: 'Marcada para descarte (gera DNP até a saída física)', type: 'checkbox', showIf: (v) => v.categoria === 'matriz' || v.categoria === 'marra' || v.categoria === 'porca' },
-        { name: 'descarte_data', label: 'Data da decisão de descarte', type: 'date', half: true, showIf: (v) => (v.categoria === 'matriz' || v.categoria === 'marra' || v.categoria === 'porca') && !!v.descarte },
         { name: 'saida', label: 'Situação', type: 'select', options: [['', 'No plantel'], ['venda', 'Vendido'], ['abate', 'Abatido'], ['morte', 'Morreu']] },
         { name: 'saida_data', label: 'Data da saída', type: 'date', half: true, required: true, showIf: (v) => !!v.saida },
         { name: 'valor_venda', label: 'Valor da venda', type: 'money', half: true, showIf: (v) => v.saida === 'venda' },
@@ -2744,9 +2755,10 @@
       onSave: async (v) => {
         const nasc = v.aquisicao === 'nascido';
         const mae = v.gestacao_id ? byId('gestacoes', v.gestacao_id) : null;
+        const cat = v.categoria === 'porca' ? 'marra' : (v.categoria === 'porco' ? 'cevado' : v.categoria);
         const row = {
-          nome: v.nome,
-          categoria: v.categoria,
+          nome: padronizarNomeAnimal(v.nome, cat),
+          categoria: cat,
           aquisicao: v.aquisicao,
           // Sem data de nascimento, usa a do parto da gestação escolhida
           nascimento: v.nascimento || (mae ? partoDe(mae) : null),
@@ -2755,7 +2767,7 @@
           negociado_com: nasc ? '' : v.negociado_com,
           valor_compra: v.aquisicao === 'comprado' ? v.valor_compra : null,
           descarte: !!v.descarte,
-          descarte_data: v.descarte ? (v.descarte_data || hoje()) : null,
+          descarte_data: v.descarte ? (a && a.descarte_data ? a.descarte_data : hoje()) : null,
           saida: v.saida || null,
           saida_data: v.saida ? v.saida_data : null,
           valor_venda: v.saida === 'venda' ? v.valor_venda : null,
@@ -2820,7 +2832,7 @@
         { name: 'aborto', label: 'Houve aborto', type: 'checkbox', showIf: (v) => !v.repeticao_cio },
         { name: 'aborto_data', label: 'Data do aborto', type: 'date', half: true, showIf: (v) => !!v.aborto },
         { name: 'parto', label: 'Parto', type: 'date', half: true, hint: ' ', showIf: (v) => !v.aborto && !v.repeticao_cio },
-        { name: 'desmame', label: 'Desmame dos leitões', type: 'date', half: true, hint: 'Em branco = 28 dias após o parto', showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'desmame', label: 'Desmame dos leitões', type: 'date', half: true, hint: `Em branco = ${DESMAME_DIAS} dias após o parto`, showIf: (v) => !v.aborto && !v.repeticao_cio },
         { name: 'vivos', label: 'Vivos', type: 'number', half: true, hint: 'Em branco = ainda não nasceu', showIf: (v) => !v.aborto && !v.repeticao_cio },
         { name: 'mortos', label: 'Mortos', type: 'number', half: true, hint: ' ', showIf: (v) => !v.aborto && !v.repeticao_cio },
         { name: 'machos', label: 'Machos', type: 'number', half: true, showIf: (v) => !v.aborto && !v.repeticao_cio },
@@ -2871,6 +2883,13 @@
       partoHint.textContent = form.elements.parto.value || !cruz
         ? ''
         : `Em branco: previsto para ${fmtDate(addDays(cruz, GESTACAO_DIAS))}`;
+      const desmameHint = $('[data-field="desmame"] .hint', form);
+      if (desmameHint) {
+        const partoVal = form.elements.parto.value || (cruz ? addDays(cruz, GESTACAO_DIAS) : null);
+        desmameHint.textContent = form.elements.desmame.value
+          ? ''
+          : (partoVal ? `Em branco: previsto para ${fmtDate(addDays(partoVal, DESMAME_DIAS))} (${DESMAME_DIAS} dias)` : `Em branco = ${DESMAME_DIAS} dias após o parto`);
+      }
       const vivos = parseNum(form.elements.vivos.value);
       const mortos = parseNum(form.elements.mortos.value);
       const ok = (n) => n == null || Number.isInteger(n);
@@ -3641,22 +3660,29 @@
       };
     });
     const gestacoes = [...db.gestacoes].sort((a, b) => nomeAnimal(a.matriz_id).localeCompare(nomeAnimal(b.matriz_id), 'pt-BR') || a.cruzamento.localeCompare(b.cruzamento))
-      .map((g) => ({
-        Matriz: animalNome(g.matriz_id),
-        Gestação: ordinal(numeroGestacao(g)),
-        'Barrão (pai)': animalNome(g.barrao_id),
-        Cruzamento: xDate(g.cruzamento),
-        Parto: xDate(partoDe(g)),
-        Situação: { nascida: 'Nascida', prevista: 'Prevista', pendente: 'Falta registrar o parto' }[situacaoGestacao(g)],
-        'Duração (dias)': g.vivos != null ? diffDays(g.cruzamento, partoDe(g)) : null,
-        Nascidos: nascidosDe(g),
-        Vivos: g.vivos,
-        Mortos: g.mortos,
-        Machos: g.machos,
-        Fêmeas: g.femeas,
-        Capação: xDate(g.capacao),
-        Observações: g.obs || '',
-      }));
+      .map((g) => {
+        const parto = partoDe(g);
+        const dataDesmame = g.desmame || (parto ? addDays(parto, DESMAME_DIAS) : null);
+        const idadeDesmame = parto && dataDesmame ? diffDays(parto, dataDesmame) : null;
+        return {
+          Matriz: animalNome(g.matriz_id),
+          Gestação: ordinal(numeroGestacao(g)),
+          'Barrão (pai)': animalNome(g.barrao_id),
+          Cruzamento: xDate(g.cruzamento),
+          Parto: xDate(parto),
+          Situação: { nascida: 'Nascida', prevista: 'Prevista', pendente: 'Falta registrar o parto' }[situacaoGestacao(g)],
+          'Duração (dias)': g.vivos != null ? diffDays(g.cruzamento, parto) : null,
+          Nascidos: nascidosDe(g),
+          Vivos: g.vivos,
+          Mortos: g.mortos,
+          Machos: g.machos,
+          Fêmeas: g.femeas,
+          Capação: xDate(g.capacao),
+          Desmame: xDate(dataDesmame),
+          'Idade no desmame (dias)': idadeDesmame,
+          Observações: g.obs || '',
+        };
+      });
     const aplicacoes = sortByDate(db.aplicacoes).map((x) => ({
       Data: xDate(x.data),
       Produto: nomeProduto(x),
@@ -3723,7 +3749,6 @@
       Matriz: d.animal.nome,
       Situação: d.animal.descarte && noPlantel(d.animal) ? 'Aguardando descarte' : statusAnimal(d.animal),
       'Total DNP (dias)': d.totalDnp,
-      'Prejuízo estimado': d.totalDnp * dnpPlantel.custoDia,
       'Motivo principal': d.motivoPrincipal,
       'Gerando DNP hoje': d.dnpHoje ? 'Sim' : 'Não',
       'Descarte planejado': d.animal.descarte ? 'Sim' : 'Não',
@@ -3734,7 +3759,7 @@
     return [
       { nome: 'Animais', linhas: animais, dinheiro: ['Valor de compra', 'Valor da venda'] },
       { nome: 'Gestações', linhas: gestacoes },
-      { nome: 'DNP', linhas: dnpExcel, dinheiro: ['Prejuízo estimado'] },
+      { nome: 'DNP', linhas: dnpExcel },
       { nome: 'Aplicações', linhas: aplicacoes },
       { nome: 'Vacinas e remédios', linhas: produtos },
       { nome: 'Abates', linhas: abates, dinheiro: dinheiroAbates },
@@ -4098,19 +4123,6 @@
     },
     'dnp-detalhes': (el) => abrirDnpDetalhes(el.dataset.id),
     'dnp-filtro': (el) => { filters.dnp = el.dataset.value; render(); },
-    'dnp-salvar-custo': () => {
-      const inp = $('#inputDnpCusto');
-      if (inp) {
-        const val = parseNum(inp.value);
-        if (val == null || Number.isNaN(val) || val < 0) {
-          toast('Digite um valor numérico válido para o custo por dia.');
-          return;
-        }
-        salvarDnpCusto(val);
-        toast(`Custo atualizado para ${fmtMoney(val)}/dia`);
-        render();
-      }
-    },
     exportar: (el) => exportarExcel(el),
     'exportar-json': () => exportarJson(),
     'exportar-zip': (el) => exportarZip(el),
@@ -4190,10 +4202,6 @@
   });
 
   view.addEventListener('change', async (e) => {
-    if (e.target.id === 'pesoAnimalSelect') {
-      atualizarCalculoPeso();
-      return;
-    }
     if (e.target.id === 'racaoIng') {
       racaoIng = e.target.value;
       render();
@@ -4447,6 +4455,7 @@
       lerFila();
       if (fila.length) await enviarFila();
       db = await Cloud.loadAll(grupoAtivo.id);
+      sincronizarNomesAnimais();
       loadedAt = Date.now();
       offline = false;
       await refreshFotos();
@@ -4458,6 +4467,7 @@
       const c = readCache();
       if (c) {
         db = { ...emptyDb(), ...c.db };
+        padronizarAnimais(db.animais);
         papel = c.papel;
         grupoAtivo = c.grupoAtivo || { id: 'cache', nome: 'Meu Grupo', papel };
         atualizarBtnGrupo();
@@ -4493,6 +4503,7 @@
 
       if (fila.length) await enviarFila();
       db = await Cloud.loadAll(grupoAtivo.id);
+      sincronizarNomesAnimais();
       loadedAt = Date.now();
       offline = false;
       await refreshFotos();

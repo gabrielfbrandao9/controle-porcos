@@ -914,3 +914,6 @@ drop policy if exists "Porcos: apagar documentos" on storage.objects;
 create policy "Porcos: apagar documentos" on storage.objects
   for delete to authenticated
   using (bucket_id = 'porcos-documentos' and exists (select 1 from public.porcos_meus_grupos()));
+
+-- Recarrega o cache de schema da API PostgREST para reconhecer novas colunas imediatamente
+notify pgrst, 'reload schema';
