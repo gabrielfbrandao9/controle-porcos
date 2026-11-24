@@ -949,7 +949,7 @@
    * de um ingrediente. Cada ingrediente = total × (% dele ÷ soma das %).
    */
 
-  const PESO_FORMULA_DEFAULT = { k: 69.3, expC: 2, expL: 1 };
+  const PESO_FORMULA_DEFAULT = { k: 69.3, expC: 2, expL: 1, rendimento: 75 };
 
   function obterPesoFormula() {
     try {
@@ -961,6 +961,7 @@
             k: Number(parsed.k) || 69.3,
             expC: parsed.expC != null && !Number.isNaN(Number(parsed.expC)) ? Number(parsed.expC) : 2,
             expL: parsed.expL != null && !Number.isNaN(Number(parsed.expL)) ? Number(parsed.expL) : 1,
+            rendimento: parsed.rendimento != null && !Number.isNaN(Number(parsed.rendimento)) && Number(parsed.rendimento) > 0 ? Number(parsed.rendimento) : 75,
           };
         }
       }
@@ -1009,33 +1010,38 @@
     const expC = Number(f.expC) != null && !Number.isNaN(Number(f.expC)) ? Number(f.expC) : 2;
     const expL = Number(f.expL) != null && !Number.isNaN(Number(f.expL)) ? Number(f.expL) : 1;
     const k = Number(f.k) || 69.3;
+    const rendimento = f.rendimento != null && !Number.isNaN(Number(f.rendimento)) && Number(f.rendimento) > 0 ? Number(f.rendimento) : 75;
 
     const peso = Math.pow(c, expC) * Math.pow(l, expL) * k;
     if (!Number.isFinite(peso) || peso <= 0) return null;
 
     const min3 = peso * 0.97;
     const max3 = peso * 1.03;
+    const pesoCarcaca = peso * (rendimento / 100);
+    const min3Carcaca = min3 * (rendimento / 100);
+    const max3Carcaca = max3 * (rendimento / 100);
 
-    return { c, l, k, expC, expL, peso, min3, max3 };
+    return { c, l, k, expC, expL, peso, min3, max3, rendimento, pesoCarcaca, min3Carcaca, max3Carcaca };
   }
 
   const fmtKg1 = (v) => (v == null || Number.isNaN(v) ? '—' : `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`);
   const fmtM2 = (v) => (v == null || Number.isNaN(v) ? '—' : `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m`);
 
-  function renderPesoResultadoHtml(res, animalObj) {
+  function renderPesoResultadoHtml(res) {
     if (!res) {
       return `
         <div class="peso-display-box">
-          <span class="peso-display-label">Peso Corporal Estimado</span>
-          <span class="peso-display-value" style="color: var(--muted); font-size: 2rem;">Preencha as medidas</span>
-          <p class="muted small" style="margin: 4px 0 0;">Informe a cintura e o comprimento para calcular em tempo real.</p>
+          <span class="peso-display-label">Peso Vivo e Carcaça Estimados</span>
+          <span class="peso-display-value" style="color: var(--muted); font-size: 1.8rem;">Preencha as medidas</span>
+          <p class="muted small" style="margin: 4px 0 0;">Informe a cintura e o comprimento para calcular o peso vivo e a carcaça em tempo real.</p>
         </div>`;
     }
 
-    const { c, l, k, expC, expL, peso, min3, max3 } = res;
+    const { c, l, k, expC, expL, peso, min3, max3, rendimento, pesoCarcaca, min3Carcaca, max3Carcaca } = res;
     const cStr = c.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const lStr = l.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const kStr = k.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    const rendStr = rendimento.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 
     let expressaoMath = '';
     if (expC === 2 && expL === 1) {
@@ -1048,20 +1054,30 @@
 
     return `
       <div class="peso-display-box">
-        <span class="peso-display-label">Peso Corporal Estimado</span>
+        <span class="peso-display-label">Peso Vivo Estimado</span>
         <span class="peso-display-value">${fmtKg1(peso)}</span>
         <div class="peso-display-range">
           <span>Faixa provável (±3%): <strong>${fmtKg1(min3)}</strong> a <strong>${fmtKg1(max3)}</strong></span>
+        </div>
+
+        <div class="peso-carcaca-box">
+          <span class="peso-carcaca-label">🥩 Rendimento de Carcaça (${rendStr}%)</span>
+          <span class="peso-carcaca-value">${fmtKg1(pesoCarcaca)}</span>
+          <span class="peso-carcaca-range">Faixa estimada (±3%): <strong>${fmtKg1(min3Carcaca)}</strong> a <strong>${fmtKg1(max3Carcaca)}</strong></span>
         </div>
       </div>
 
       <div class="peso-calc-breakdown">
         <span class="peso-calc-formula-title">Cálculo passo a passo (em tempo real)</span>
         <div class="peso-calc-math">${expressaoMath}</div>
+        <div style="font-family: var(--mono); font-size: 0.88rem; margin: 6px 0; color: var(--ink);">
+          Carcaça (${rendStr}%) = ${fmtKg1(peso)} × ${rendStr}% = <strong>${fmtKg1(pesoCarcaca)}</strong>
+        </div>
         <div class="peso-calc-legend">
           <span>• <strong>Cintura (C):</strong> ${fmtM2(c)} (${Math.round(c * 100)} cm)${expC !== 1 ? ` com expoente ${expC} = ${(Math.pow(c, expC)).toFixed(4)}` : ''}</span>
           <span>• <strong>Comprimento (L):</strong> ${fmtM2(l)} (${Math.round(l * 100)} cm)${expL !== 1 ? ` com expoente ${expL} = ${(Math.pow(l, expL)).toFixed(4)}` : ''}</span>
           <span>• <strong>Constante K:</strong> ${kStr} (fator multiplicador padrão SOS Suínos)</span>
+          <span>• <strong>Rendimento de Carcaça:</strong> ${rendStr}% sobre o peso vivo estimado</span>
           <span>• <strong>Margem de erro estimada:</strong> ±3% para animais em estação e postura natural.</span>
         </div>
       </div>`;
@@ -1080,7 +1096,7 @@
         </div>
         <p class="muted small" style="margin: 0;">
           A fórmula padrão da SOS Suínos é: <strong>Peso (kg) = Cintura² × Comprimento × 69,3</strong>.
-          Você pode calibrar o fator K ou os expoentes conforme seu lote.
+          Você pode calibrar o fator K, os expoentes e o rendimento de carcaça conforme seu lote.
         </p>
         <div class="peso-config-grid">
           <label class="peso-field">
@@ -1095,15 +1111,19 @@
             <span>Expoente do Comprimento (L)</span>
             <input id="inputPesoExpL" inputmode="numeric" value="${esc(toInput(formula.expL))}">
           </label>
+          <label class="peso-field">
+            <span>Rendimento / Aproveitamento de carcaça (%)</span>
+            <input id="inputPesoRendimento" inputmode="decimal" value="${esc(toInput(formula.rendimento != null ? formula.rendimento : 75))}" placeholder="75">
+          </label>
         </div>
         <div class="peso-config-actions">
           <button type="button" class="btn primary" data-act="peso-salvar-formula">Salvar Fórmula</button>
-          <button type="button" class="btn" data-act="peso-restaurar-formula" title="Volta para K=69,3, C² e L¹">Restaurar padrão (69,3)</button>
+          <button type="button" class="btn" data-act="peso-restaurar-formula" title="Volta para K=69,3, C², L¹ e 75% de carcaça">Restaurar padrão (69,3 / 75%)</button>
           <button type="button" class="btn ghost" data-act="peso-cancelar-formula">Fechar</button>
         </div>
       </div>` : '';
 
-    return `${pageHead('Ração', 'Estimativa de peso biométrico sem balança (SOS Suínos)')}
+    return `${pageHead('Ração', 'Estimativa de peso biométrico sem balança (Peso Vivo)')}
       ${switcherHtml}
       ${configPanelHtml}
 
@@ -1139,11 +1159,19 @@
             <small class="muted">Medir da base da orelha até a base do rabo. Aceita metros (ex: 1,02) ou cm (ex: 102).</small>
           </div>
 
-          <div style="background: var(--surface-2); padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 0.85rem;">
-            <strong>Fórmula configurada:</strong>
-            <span style="font-family: var(--mono); color: var(--accent); font-weight: 700; margin-left: 4px;">
-              C<sup>${formula.expC}</sup> × L<sup>${formula.expL}</sup> × ${formula.k.toLocaleString('pt-BR')}
-            </span>
+          <div style="background: var(--surface-2); padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px;">
+            <div>
+              <strong>Fórmula de Peso Vivo:</strong>
+              <span style="font-family: var(--mono); color: var(--accent); font-weight: 700; margin-left: 4px;">
+                C<sup>${formula.expC}</sup> × L<sup>${formula.expL}</sup> × ${formula.k.toLocaleString('pt-BR')}
+              </span>
+            </div>
+            <div>
+              <strong>Rendimento de Carcaça:</strong>
+              <span style="font-family: var(--mono); color: var(--ink); font-weight: 700; margin-left: 4px;">
+                ${(formula.rendimento != null ? formula.rendimento : 75).toLocaleString('pt-BR')}%
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1862,19 +1890,42 @@
     };
   }
 
+  function statusReprodutivoMatriz(a) {
+    if (!noPlantel(a)) return statusAnimal(a);
+    if (a.descarte) return 'Aguardando descarte';
+    const gs = gestacoesDe(a.id);
+    const emAndamento = gs.find((g) => g.vivos == null && !g.aborto && !g.repeticao_cio);
+    if (emAndamento) return 'Gestante';
+    const ultG = [...gs].reverse().find((g) => g.vivos != null);
+    if (ultG) {
+      const dataParto = partoDe(ultG);
+      const dataDesmame = ultG.desmame || addDays(dataParto, DESMAME_DIAS);
+      if (diffDays(hoje(), dataDesmame) >= 0) return 'Lactante';
+    }
+    return 'Vazia';
+  }
+
+  function badgeReprodCls(s) {
+    if (s === 'Gestante') return 'badge-gestante';
+    if (s === 'Lactante') return 'badge-lactante';
+    if (s === 'Vazia') return 'badge-vazia';
+    if (s === 'Aguardando descarte') return 'dnp-descarte';
+    return 'muted';
+  }
+
   function renderDnp() {
     const p = calcularDnpPlantel();
     const f = filters.dnp || 'todos';
 
     const cardMedia = stat(
-      'DNP Médio do Plantel',
+      'DNP Médio',
       `${fmtNum(p.mediaPlantel)} dias`,
       p.matrizesProdutivas && p.matrizesProdutivas.length !== p.matrizesNoPlantel.length
-        ? `Média das ${p.matrizesProdutivas.length} matrizes produtivas (exclui descarte)`
-        : 'Média por matriz produtiva no plantel'
+        ? `${p.matrizesProdutivas.length} produtivas`
+        : 'Por matriz'
     );
-    const cardTotal = stat('Total DNP Acumulado', `${fmtNum(p.totalDnp)} dias`, `${plural(p.femeas.length, 'matriz avaliada', 'matrizes avaliadas')}`);
-    const cardHoje = stat('Gerando DNP Hoje', `${p.gerandoHoje.length}`, p.gerandoHoje.length === 1 ? '1 matriz com DNP ativo' : `${p.gerandoHoje.length} matrizes com DNP ativo`, p.gerandoHoje.length ? 'warn' : 'pos');
+    const cardTotal = stat('DNP Total', `${fmtNum(p.totalDnp)} dias`, `${plural(p.femeas.length, 'matriz', 'matrizes')}`);
+    const cardHoje = stat('DNP Ativo Hoje', `${p.gerandoHoje.length}`, p.gerandoHoje.length === 1 ? '1 matriz ativa' : `${p.gerandoHoje.length} matrizes ativas`, p.gerandoHoje.length ? 'warn' : 'pos');
 
     const alertaHtml = p.gerandoHoje.length ? `
       <div class="dnp-alerta-box">
@@ -1906,14 +1957,15 @@
       </div>
     `;
 
-    const buscaHtml = p.matrizesDnp.length > 4 ? `
+    const buscaHtml = p.matrizesDnp.length > 3 ? `
       <input type="search" id="buscaDnp" class="busca" placeholder="Buscar fêmea por nome ou motivo do DNP…" aria-label="Buscar fêmea no DNP" autocomplete="off" value="${esc(buscaDnp)}">
     ` : '';
 
     const linhasHtml = p.matrizesDnp.map((d) => {
       const a = d.animal;
       const sit = noPlantel(a) ? (a.descarte ? 'descarte' : 'plantel') : (a.saida || 'saiu');
-      const buscaStr = normBusca([a.nome, d.motivoPrincipal, statusAnimal(a), a.descarte ? 'descarte' : '', d.dnpHoje ? 'hoje gerando' : ''].join(' '));
+      const statusReprod = statusReprodutivoMatriz(a);
+      const buscaStr = normBusca([a.nome, statusReprod, d.motivoPrincipal, statusAnimal(a), a.descarte ? 'descarte aguardando' : '', d.dnpHoje ? 'hoje gerando ativo' : '', d.totalDnp > 0 ? `${d.totalDnp} dias` : 'sem dnp'].join(' '));
 
       return `
         <tr class="dnp-row" data-id="${a.id}" data-sit="${sit}" data-hoje="${d.dnpHoje ? '1' : '0'}" data-dnp="${d.totalDnp > 0 ? '1' : '0'}" data-busca="${esc(buscaStr)}">
@@ -1928,6 +1980,9 @@
           </td>
           <td>
             <span class="badge ${a.descarte && noPlantel(a) ? 'dnp-descarte' : (a.saida ? 'muted' : 'ok')}">${esc(a.descarte && noPlantel(a) ? 'Aguardando descarte' : statusAnimal(a))}</span>
+          </td>
+          <td>
+            <span class="badge ${badgeReprodCls(statusReprod)}">${esc(statusReprod)}</span>
           </td>
           <td>
             <div class="dnp-dias-destaque${d.totalDnp > 0 ? ' com-dnp' : ''}">${d.totalDnp} ${d.totalDnp === 1 ? 'dia' : 'dias'}</div>
@@ -1945,61 +2000,118 @@
       `;
     }).join('');
 
+    const cardsHtml = p.matrizesDnp.map((d) => {
+      const a = d.animal;
+      const sit = noPlantel(a) ? (a.descarte ? 'descarte' : 'plantel') : (a.saida || 'saiu');
+      const statusReprod = statusReprodutivoMatriz(a);
+      const buscaStr = normBusca([a.nome, statusReprod, d.motivoPrincipal, statusAnimal(a), a.descarte ? 'descarte aguardando' : '', d.dnpHoje ? 'hoje gerando ativo' : '', d.totalDnp > 0 ? `${d.totalDnp} dias` : 'sem dnp'].join(' '));
+
+      return `
+        <article class="dnp-card${d.dnpHoje ? ' dnp-card-alerta' : ''}" data-id="${a.id}" data-sit="${sit}" data-hoje="${d.dnpHoje ? '1' : '0'}" data-dnp="${d.totalDnp > 0 ? '1' : '0'}" data-busca="${esc(buscaStr)}">
+          <div class="dnp-card-top">
+            <div class="dnp-card-animal">
+              ${fotoHtml(a, 'sm')}
+              <div class="dnp-card-titulos">
+                <a href="#/animal/${a.id}" class="dnp-card-nome">${esc(a.nome)}</a>
+                <span class="dnp-card-sub muted">${esc(CATEGORIAS[a.categoria])}${a.nascimento ? ` · ${esc(idadeAnimal(a))}` : ''}</span>
+              </div>
+            </div>
+            <div class="dnp-card-kpi-wrap">
+              <span class="dnp-card-kpi${d.totalDnp > 0 ? ' com-dnp' : ''}">
+                ${d.totalDnp} ${d.totalDnp === 1 ? 'dia' : 'dias'}
+              </span>
+              ${d.dnpHoje ? '<span class="dnp-alerta-dot" title="Gerando DNP ativo hoje">⚠️</span>' : ''}
+            </div>
+          </div>
+
+          <div class="dnp-card-mid">
+            <div class="dnp-card-tags">
+              <span class="badge ${badgeReprodCls(statusReprod)}">${esc(statusReprod)}</span>
+              <span class="badge ${d.motivoBadgeCls}">${esc(d.motivoPrincipal)}</span>
+              ${d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ DNP ativo hoje</span>' : ''}
+            </div>
+          </div>
+
+          <div class="dnp-card-bottom">
+            <button type="button" class="btn small ghost dnp-detalhes-btn" data-act="dnp-detalhes" data-id="${a.id}">
+              ${ICON.eye} Ver extrato detalhado
+            </button>
+          </div>
+        </article>
+      `;
+    }).join('');
+
     const tabelaHtml = `
-      <div class="table-wrap">
-        <table class="table" id="dnpTabela">
-          <thead>
-            <tr>
-              <th>Matriz</th>
-              <th>Situação</th>
-              <th>DNP Total</th>
-              <th>Motivo Principal</th>
-              <th>Status Hoje</th>
-              <th style="text-align:right;">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${linhasHtml}
-          </tbody>
-        </table>
+      <div class="dnp-table-desktop">
+        <div class="table-wrap">
+          <table class="table" id="dnpTabela">
+            <thead>
+              <tr>
+                <th>Matriz</th>
+                <th>Situação</th>
+                <th>Status Reprodutivo</th>
+                <th>DNP Total</th>
+                <th>Motivo Principal</th>
+                <th>Status Hoje</th>
+                <th style="text-align:right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${linhasHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dnp-cards-mobile" id="dnpCardsList">
+        ${cardsHtml}
       </div>
       <div class="empty-box" id="dnpVazio" hidden><p id="dnpVazioTxt">Nenhuma matriz encontrada.</p></div>
     `;
 
     return `
       ${pageHead('Dias Não Produtivos (DNP)', 'Manejo reprodutivo, intervalos entre partos e dias improdutivos acumulados do plantel.')}
-      <div class="stats">${cardMedia}${cardTotal}${cardHoje}</div>
-      ${alertaHtml}
-      ${chipsHtml}
-      ${buscaHtml}
-      ${p.matrizesDnp.length ? tabelaHtml : '<div class="empty-box"><p>Nenhuma matriz cadastrada.</p></div>'}
+      <div class="dnp-container">
+        <div class="stats dnp-stats-grid">${cardMedia}${cardTotal}${cardHoje}</div>
+        ${alertaHtml}
+        ${chipsHtml}
+        ${buscaHtml}
+        ${p.matrizesDnp.length ? tabelaHtml : '<div class="empty-box"><p>Nenhuma matriz cadastrada.</p></div>'}
+      </div>
     `;
   }
 
   function filtrarDnp() {
-    const tabela = $('#dnpTabela');
-    const vazio = $('#dnpVazio');
-    if (!tabela || !vazio) return;
     const q = normBusca(buscaDnp.trim());
     const f = filters.dnp || 'todos';
     let n = 0;
 
-    tabela.querySelectorAll('tbody tr').forEach((tr) => {
+    const filtrarEl = (el) => {
       let ok = true;
       if (q) {
-        ok = tr.dataset.busca.includes(q);
+        ok = el.dataset.busca.includes(q);
       } else {
-        if (f === 'hoje') ok = tr.dataset.hoje === '1';
-        else if (f === 'plantel') ok = tr.dataset.sit === 'plantel' || tr.dataset.sit === 'descarte';
-        else if (f === 'com_dnp') ok = tr.dataset.dnp === '1';
-        else if (f === 'descarte') ok = tr.dataset.sit === 'descarte';
+        if (f === 'hoje') ok = el.dataset.hoje === '1';
+        else if (f === 'plantel') ok = el.dataset.sit === 'plantel' || el.dataset.sit === 'descarte';
+        else if (f === 'com_dnp') ok = el.dataset.dnp === '1';
+        else if (f === 'descarte') ok = el.dataset.sit === 'descarte';
       }
-      tr.hidden = !ok;
-      if (ok) n++;
+      el.hidden = !ok;
+      return ok;
+    };
+
+    $$('#dnpTabela tbody tr', view).forEach(filtrarEl);
+
+    const cards = $$('#dnpCardsList .dnp-card', view);
+    cards.forEach((c) => {
+      if (filtrarEl(c)) n++;
     });
 
-    vazio.hidden = n > 0;
-    $('#dnpVazioTxt').textContent = q ? `Nenhuma matriz encontrada com “${buscaDnp.trim()}”.` : 'Nenhuma matriz aqui.';
+    const vazio = $('#dnpVazio');
+    if (vazio) {
+      const temVisivel = cards.length ? n > 0 : $$('#dnpTabela tbody tr', view).some((r) => !r.hidden);
+      vazio.hidden = temVisivel;
+      $('#dnpVazioTxt').textContent = q ? `Nenhuma matriz encontrada com “${buscaDnp.trim()}”.` : 'Nenhuma matriz aqui.';
+    }
     $$('.chips .chip', view).forEach((c) => c.classList.toggle('dim', !!q));
   }
 
@@ -4064,22 +4176,33 @@
       const kEl = $('#inputPesoK');
       const cEl = $('#inputPesoExpC');
       const lEl = $('#inputPesoExpL');
+      const rEl = $('#inputPesoRendimento');
       const k = kEl ? parseNum(kEl.value) : 69.3;
       const expC = cEl ? parseNum(cEl.value) : 2;
       const expL = lEl ? parseNum(lEl.value) : 1;
+      const rendimento = rEl ? parseNum(rEl.value) : 75;
       if (k == null || Number.isNaN(k) || k <= 0) {
         toast('Digite um valor válido para a constante K (ex.: 69,3).');
         return;
       }
-      salvarPesoFormula({ k, expC: expC != null ? expC : 2, expL: expL != null ? expL : 1 });
+      if (rendimento == null || Number.isNaN(rendimento) || rendimento <= 0 || rendimento > 100) {
+        toast('Digite um percentual válido para o rendimento de carcaça (ex.: 75%).');
+        return;
+      }
+      salvarPesoFormula({
+        k,
+        expC: expC != null ? expC : 2,
+        expL: expL != null ? expL : 1,
+        rendimento: rendimento != null ? rendimento : 75,
+      });
       pesoEditandoFormula = false;
-      toast(`Fórmula atualizada: K = ${k.toLocaleString('pt-BR')}`);
+      toast(`Fórmula atualizada: K = ${k.toLocaleString('pt-BR')} | Carcaça = ${rendimento.toLocaleString('pt-BR')}%`);
       render();
     },
     'peso-restaurar-formula': () => {
       salvarPesoFormula({ ...PESO_FORMULA_DEFAULT });
       pesoEditandoFormula = false;
-      toast('Fórmula restaurada para o padrão (69,3)!');
+      toast('Fórmula restaurada para o padrão (69,3 e 75% de carcaça)!');
       render();
     },
     'peso-cancelar-formula': () => {

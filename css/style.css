@@ -588,6 +588,35 @@ button.dose:hover { border-color: var(--accent); }
   margin-top: 4px;
 }
 
+.peso-carcaca-box {
+  width: 100%;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.peso-carcaca-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.peso-carcaca-value {
+  font-family: var(--display);
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.peso-carcaca-range {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .peso-calc-breakdown {
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -1510,6 +1539,247 @@ dialog.dnp-dialog[open] { display: flex; }
   .dnp-resumo-banner {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* ---------- Layout e Cards Mobile de DNP ---------- */
+.dnp-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dnp-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .dnp-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .dnp-stats-grid .stat:last-child {
+    grid-column: span 2;
+  }
+  .dnp-table-desktop {
+    display: none !important;
+  }
+  .dnp-cards-mobile {
+    display: flex !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .dnp-table-desktop {
+    display: block !important;
+  }
+  .dnp-cards-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: 350px) {
+  .dnp-stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .dnp-stats-grid .stat:last-child {
+    grid-column: span 1;
+  }
+}
+
+.dnp-cards-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.dnp-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+:root:not([data-theme='light']) .dnp-card,
+.dark .dnp-card {
+  background: #0a0a0a;
+  border-color: #1f1f1f;
+}
+
+.dnp-card.dnp-card-alerta {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.04);
+}
+
+:root:not([data-theme='light']) .dnp-card.dnp-card-alerta,
+.dark .dnp-card.dnp-card-alerta {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.07);
+}
+
+.dnp-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dnp-card-animal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dnp-card-titulos {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.dnp-card-nome {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dnp-card-nome:hover {
+  color: var(--accent);
+}
+
+.dnp-card-sub {
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dnp-card-kpi-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dnp-card-kpi {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.05rem;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.dnp-card-kpi.com-dnp {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: transparent;
+}
+
+:root:not([data-theme='light']) .dnp-card-kpi.com-dnp,
+.dark .dnp-card-kpi.com-dnp {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+.dnp-alerta-dot {
+  font-size: 1rem;
+}
+
+.dnp-card-mid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dnp-card-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dnp-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+:root:not([data-theme='light']) .dnp-card-bottom,
+.dark .dnp-card-bottom {
+  border-top-color: #1f1f1f;
+}
+
+.dnp-detalhes-btn {
+  width: 100%;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.badge.badge-gestante {
+  background: #ede9fe;
+  color: #4338ca;
+  border-color: transparent;
+}
+.badge.badge-lactante {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: transparent;
+}
+.badge.badge-vazia {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: transparent;
+}
+
+.dark .badge.badge-gestante,
+:root:not([data-theme='light']) .badge.badge-gestante {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+.dark .badge.badge-lactante,
+:root:not([data-theme='light']) .badge.badge-lactante {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+.dark .badge.badge-vazia,
+:root:not([data-theme='light']) .badge.badge-vazia {
+  background: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
 }
 
 /* ---------- Modo Escuro OLED Puro (#000000) ---------- */
