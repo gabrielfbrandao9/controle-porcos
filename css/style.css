@@ -195,7 +195,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   .topbar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg); }
   .nav {
     position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; margin: 0;
-    display: grid; grid-template-columns: repeat(7, 1fr);
+    display: grid; grid-template-columns: repeat(8, 1fr);
     padding: 6px 2px calc(6px + env(safe-area-inset-bottom));
     background: var(--surface); border-top: 1px solid var(--line);
   }
@@ -1076,6 +1076,217 @@ dialog.viewer-dialog[open] {
   }
   .sos-dropzone .btn { width: 100%; }
   .sos-grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- DNP (Dias Não Produtivos) ---------- */
+
+.dnp-custo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+  box-shadow: var(--shadow);
+}
+.dnp-custo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dnp-custo-info strong {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.dnp-custo-info small {
+  font-size: 0.8rem;
+}
+.dnp-custo-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dnp-custo-controls .input-affix {
+  max-width: 140px;
+}
+.dnp-custo-controls input {
+  text-align: right;
+  font-weight: 700;
+  min-height: 36px;
+}
+
+.dnp-alerta-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  border: 1px solid var(--line);
+  margin-bottom: 20px;
+}
+.dnp-alerta-box svg {
+  color: var(--warn);
+  width: 24px;
+  height: 24px;
+}
+
+.badge.dnp-ativo {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px var(--danger);
+}
+.badge.dnp-ok { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
+.badge.dnp-marra { background: #fee2e2; color: #991b1b; border-color: transparent; }
+.badge.dnp-desmame { background: #ffedd5; color: #9a3412; border-color: transparent; }
+.badge.dnp-cio { background: #fef3c7; color: #92400e; border-color: transparent; }
+.badge.dnp-aborto { background: #fce7f3; color: #9d174d; border-color: transparent; }
+.badge.dnp-descarte { background: #ede9fe; color: #5b21b6; border-color: transparent; }
+.badge.dnp-ip { background: #e0f2fe; color: #0369a1; border-color: transparent; }
+
+.dark .badge.dnp-marra { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+.dark .badge.dnp-desmame { background: rgba(249, 115, 22, 0.2); color: #fdba74; }
+.dark .badge.dnp-cio { background: rgba(245, 158, 11, 0.2); color: #fde047; }
+.dark .badge.dnp-aborto { background: rgba(236, 72, 153, 0.2); color: #f472b6; }
+.dark .badge.dnp-descarte { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; }
+.dark .badge.dnp-ip { background: rgba(14, 165, 233, 0.2); color: #7dd3fc; }
+
+.dnp-dias-destaque {
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.dnp-dias-destaque.com-dnp {
+  color: var(--danger);
+}
+
+/* Modal de Detalhamento de DNP */
+dialog.dnp-dialog {
+  width: min(720px, calc(100vw - 20px));
+  max-height: min(88vh, 800px);
+  padding: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+dialog.dnp-dialog:not([open]) { display: none; }
+dialog.dnp-dialog[open] { display: flex; }
+
+.dnp-dialog-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dnp-resumo-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.dnp-resumo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dnp-resumo-item small {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.dnp-resumo-item strong {
+  font-size: 1.15rem;
+}
+
+.dnp-secao-titulo {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-top: 4px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dnp-lista {
+  display: grid;
+  gap: 10px;
+}
+
+.dnp-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.dnp-item.ativo-hoje {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 25%, var(--surface));
+}
+
+.dnp-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.dnp-item-motivo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.dnp-item-dias {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--danger);
+}
+.dnp-item-periodo {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.dnp-item-obs {
+  font-size: 0.82rem;
+}
+
+@media (max-width: 600px) {
+  .dnp-custo-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+    gap: 10px;
+  }
+  .dnp-custo-controls {
+    justify-content: space-between;
+  }
+  .dnp-custo-controls .input-affix {
+    flex: 1;
+    max-width: none;
+  }
+  .dnp-resumo-banner {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

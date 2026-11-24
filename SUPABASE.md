@@ -36,8 +36,8 @@ Em **Authentication** → **URL Configuration** → **Redirect URLs**:
 | `porcos_grupos` | Criações/grupos independentes (nome, data de criação, dono) |
 | `porcos_membros` | Membros de cada grupo, seus papéis (`dono`, `editor`, `leitor`) e último acesso |
 | `porcos_convites` | Códigos de convites por link ativos para novos membros |
-| `porcos_animais` | Plantel de cada grupo (`grupo_id`) |
-| `porcos_gestacoes` | Gestações e crias de cada matriz no grupo (`grupo_id`) |
+| `porcos_animais` | Plantel de cada grupo (`grupo_id`), incluindo descarte planejado (`descarte`, `descarte_data`) e saída física |
+| `porcos_gestacoes` | Gestações e crias de cada matriz no grupo (`grupo_id`), desmame, abortos e repetições de cio (DNP) |
 | `porcos_produtos` | Vacinas e remédios cadastrados no grupo (`grupo_id`) |
 | `porcos_aplicacoes` | Aplicações de vacinas/medicamentos no grupo (`grupo_id`) |
 | `porcos_abates` | Registros de abate no grupo (`grupo_id`) |

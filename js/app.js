@@ -68,6 +68,9 @@
     eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
     sos: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M4.93 4.93 8.5 8.5M15.5 15.5l3.57 3.57M4.93 19.07 8.5 15.5M15.5 8.5l3.57-3.57"/></svg>',
     refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    timer: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/><path d="M10 2h4"/><path d="M12 2v3"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
     google: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>',
   };
 
@@ -98,10 +101,11 @@
   let docUrl = {};
   let buscaSos = '';
   let filtroSos = 'todos';
+  let buscaDnp = '';
   let loadedAt = 0;
   let offline = false;
   let current = { name: 'inicio', id: null };
-  const filters = { animais: 'plantel', ano: 'todos', lancTodos: false, histTodos: false, esporadicoTodos: new Set() };
+  const filters = { animais: 'plantel', dnp: 'todos', ano: 'todos', lancTodos: false, histTodos: false, esporadicoTodos: new Set() };
   let racaoModo = 'total';
   let racaoQtd = 100;
   let racaoIng = 'Milho';
@@ -139,8 +143,10 @@
   // Nascidos = vivos + mortos (null enquanto não nasceu)
   const nascidosDe = (g) => (g.vivos == null ? null : g.vivos + (g.mortos || 0));
 
-  // 'nascida', 'prevista' (parto ainda não chegou) ou 'pendente' (data passou e falta registrar)
+  // 'aborto', 'repeticao', 'nascida', 'prevista' (parto ainda não chegou) ou 'pendente' (data passou e falta registrar)
   function situacaoGestacao(g) {
+    if (g.aborto) return 'aborto';
+    if (g.repeticao_cio) return 'repeticao';
     if (g.vivos != null) return 'nascida';
     return daysUntil(partoDe(g)) >= 0 ? 'prevista' : 'pendente';
   }
@@ -230,6 +236,8 @@
   function badgeGestacao(g) {
     const s = situacaoGestacao(g);
     const parto = partoDe(g);
+    if (s === 'aborto') return `<span class="badge dnp-aborto">Aborto · ${esc(fmtDate(g.aborto_data || g.cruzamento))}</span>`;
+    if (s === 'repeticao') return '<span class="badge dnp-cio">Repetição de cio</span>';
     if (s === 'nascida') return `<span class="badge ok">Nascida · ${esc(fmtAge(parto))}</span>`;
     if (s === 'prevista') return `<span class="badge warn">Prevista · ${esc(fmtRelative(parto))}</span>`;
     return '<span class="badge danger">Registrar o parto</span>';
@@ -255,6 +263,7 @@
       animais: renderAnimais,
       animal: () => renderAnimal(current.id),
       crias: renderCrias,
+      dnp: renderDnp,
       saude: renderSaude,
       racao: renderRacao,
       financas: renderFinancas,
@@ -263,6 +272,7 @@
     };
     view.innerHTML = banners() + (pages[current.name] || renderInicio)();
     if (current.name === 'animais') filtrarAnimais();
+    if (current.name === 'dnp') filtrarDnp();
     if (current.name === 'conta') loadMembrosEConvites();
   }
 
@@ -399,6 +409,19 @@
         text: `${ordinal(numeroGestacao(g))} gestação · previsto para ${esc(fmtDate(parto))} (${esc(fmtRelative(parto))})`,
       });
     });
+
+    // DNP: fêmeas gerando dias não produtivos hoje
+    const dnpPlantel = calcularDnpPlantel();
+    if (dnpPlantel.gerandoHoje.length) {
+      avisos.push({
+        ordem: -999,
+        cls: 'danger',
+        icon: ICON.timer,
+        href: '#/dnp',
+        title: `${plural(dnpPlantel.gerandoHoje.length, 'fêmea gerando DNP hoje', 'fêmeas gerando DNP hoje')}`,
+        text: `${esc(dnpPlantel.gerandoHoje.map((d) => d.animal.nome).join(', '))} · toque para ver as causas e evitar prejuízo`,
+      });
+    }
     avisos.sort((a, b) => a.ordem - b.ordem);
 
     const avisosHtml = avisos.length
@@ -543,6 +566,36 @@
         ${partesAbate(abate).length ? partesTabela(abate) : ''}`,
       { extra: editBtn(`<button type="button" class="btn small" data-act="abate-edit" data-id="${abate.id}">${ICON.edit} Editar</button>`) }) : '';
 
+    let dnpSecHtml = '';
+    if (a.categoria === 'matriz' || a.categoria === 'porca') {
+      const d = calcularDnpMatriz(a);
+      const custo = obterDnpCusto();
+      dnpSecHtml = `<section class="section card">
+        <div class="section-head">
+          <h2>Dias Não Produtivos (DNP)</h2>
+          <button type="button" class="btn small" data-act="dnp-detalhes" data-id="${a.id}">${ICON.eye} Extrato de DNP</button>
+        </div>
+        <div class="dnp-resumo-banner">
+          <div class="dnp-resumo-item">
+            <small>Total DNP</small>
+            <strong class="${d.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${d.totalDnp} dias</strong>
+          </div>
+          <div class="dnp-resumo-item">
+            <small>Prejuízo estimado</small>
+            <strong class="${d.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${fmtMoney(d.totalDnp * custo)}</strong>
+          </div>
+          <div class="dnp-resumo-item">
+            <small>Status Hoje</small>
+            <strong>${d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>'}</strong>
+          </div>
+          <div class="dnp-resumo-item">
+            <small>Motivo principal</small>
+            <strong><span class="badge ${d.motivoBadgeCls}">${esc(d.motivoPrincipal)}</span></strong>
+          </div>
+        </div>
+      </section>`;
+    }
+
     return `<a class="back" href="#/animais">${ICON.back} Animais</a>
       <div class="hero card">
         <div class="hero-photo">${fotoHtml(a, 'xl')}
@@ -550,7 +603,8 @@
         <div class="hero-main">
           <h1>${esc(a.nome)}</h1>
           <p class="hero-badges"><span class="badge cat-${a.categoria}">${esc(CATEGORIAS[a.categoria])}</span>
-            <span class="badge ${a.saida ? 'muted' : 'ok'}">${esc(statusAnimal(a))}</span></p>
+            <span class="badge ${a.saida ? 'muted' : 'ok'}">${esc(statusAnimal(a))}</span>
+            ${a.descarte && noPlantel(a) ? '<span class="badge dnp-descarte">Aguardando descarte</span>' : ''}</p>
           ${(() => {
             const g = a.gestacao_id && byId('gestacoes', a.gestacao_id);
             return g ? `<p class="cria-de">Cria da <a href="#/animal/${g.matriz_id}">${esc(nomeAnimal(g.matriz_id))}</a>${g.barrao_id
@@ -564,6 +618,7 @@
         </div>
       </div>
       ${bloco('animal-vacinas', 'Vacinas e remédios', saudeHtml)}
+      ${dnpSecHtml}
       ${gestHtml}
       ${abateHtml}`;
   }
@@ -623,15 +678,23 @@
     const linhas = [
       ['Barrão (pai)', g.barrao_id ? nomeAnimal(g.barrao_id) : '—'],
       ['Cruzamento', fmtDate(g.cruzamento)],
-      [nascida || g.parto ? 'Parto' : 'Parto previsto', fmtDate(parto)],
     ];
-    if (nascida) {
-      linhas.push(['Duração', plural(diffDays(g.cruzamento, parto), 'dia', 'dias')]);
-      linhas.push(['Nascidos', String(nascidosDe(g))]);
-      linhas.push(['Vivos', String(g.vivos)]);
-      linhas.push(['Mortos', g.mortos != null ? String(g.mortos) : '—']);
-      if (g.machos != null || g.femeas != null) linhas.push(['Machos / fêmeas', `${g.machos ?? '—'} / ${g.femeas ?? '—'}`]);
-      linhas.push(['Capação', fmtDate(g.capacao)]);
+    if (g.aborto) {
+      linhas.push(['Situação', 'Aborto']);
+      linhas.push(['Data do aborto', fmtDate(g.aborto_data || g.cruzamento)]);
+    } else if (g.repeticao_cio) {
+      linhas.push(['Situação', 'Repetição de cio (cobertura não vingou)']);
+    } else {
+      linhas.push([nascida || g.parto ? 'Parto' : 'Parto previsto', fmtDate(parto)]);
+      if (g.desmame) linhas.push(['Desmame', fmtDate(g.desmame)]);
+      if (nascida) {
+        linhas.push(['Duração', plural(diffDays(g.cruzamento, parto), 'dia', 'dias')]);
+        linhas.push(['Nascidos', String(nascidosDe(g))]);
+        linhas.push(['Vivos', String(g.vivos)]);
+        linhas.push(['Mortos', g.mortos != null ? String(g.mortos) : '—']);
+        if (g.machos != null || g.femeas != null) linhas.push(['Machos / fêmeas', `${g.machos ?? '—'} / ${g.femeas ?? '—'}`]);
+        linhas.push(['Capação', fmtDate(g.capacao)]);
+      }
     }
     return `<article class="cria card">
       <header><h3>${ordinal(n)} gestação</h3>${badgeGestacao(g)}</header>
@@ -1235,6 +1298,456 @@
       ${buscaHtml}
       ${docsHtml}
     `;
+  }
+
+  // ---------- DNP (Dias Não Produtivos) ----------
+
+  const DNP_CUSTO_KEY = 'porcos:dnp_custo';
+  function obterDnpCusto() {
+    try {
+      const v = parseFloat(localStorage.getItem(DNP_CUSTO_KEY));
+      return Number.isFinite(v) && v >= 0 ? v : 15;
+    } catch (e) {
+      return 15;
+    }
+  }
+  function salvarDnpCusto(v) {
+    try { localStorage.setItem(DNP_CUSTO_KEY, String(v)); } catch (e) {}
+  }
+
+  function calcularDnpMatriz(m) {
+    const gs = gestacoesDe(m.id);
+    const dataFim = noPlantel(m) ? hoje() : (m.saida_data || hoje());
+    const itens = [];
+    const intervalosParto = [];
+
+    // 1. Marrãs sem cobertura > 210 dias
+    if (m.nascimento) {
+      const meta210 = addDays(m.nascimento, 210);
+      if (gs.length > 0) {
+        const primeiroCruz = gs[0].cruzamento;
+        const dias = diffDays(meta210, primeiroCruz);
+        if (dias > 0) {
+          itens.push({
+            tipo: 'marra',
+            rotulo: 'Marrã > 210d sem cobertura',
+            badgeCls: 'dnp-marra',
+            dias,
+            periodo: `${fmtDate(meta210)} a ${fmtDate(primeiroCruz)}`,
+            ativoHoje: false,
+            obs: `Idade de 210 dias completada em ${fmtDate(meta210)}, primeira cobertura em ${fmtDate(primeiroCruz)}.`,
+          });
+        }
+      } else {
+        const dias = diffDays(meta210, dataFim);
+        if (dias > 0) {
+          const ativoHoje = noPlantel(m);
+          itens.push({
+            tipo: 'marra',
+            rotulo: 'Marrã > 210d sem cobertura',
+            badgeCls: 'dnp-marra',
+            dias,
+            periodo: `${fmtDate(meta210)} até ${ativoHoje ? 'hoje' : fmtDate(dataFim)}`,
+            ativoHoje,
+            obs: ativoHoje
+              ? `Completou 210 dias em ${fmtDate(meta210)} e ainda não foi coberta.`
+              : `Completou 210 dias em ${fmtDate(meta210)} e saiu sem cobertura.`,
+          });
+        }
+      }
+    }
+
+    // 2. Atraso pós-desmame > 4 dias & 5. Intervalo de Partos > 140 dias
+    for (let i = 0; i < gs.length; i++) {
+      const g = gs[i];
+      const gNext = gs[i + 1] || null;
+
+      if (g.vivos != null) {
+        const parto = partoDe(g);
+        const desmame = g.desmame || addDays(parto, 28);
+        const tolerancia = addDays(desmame, 4);
+
+        if (gNext) {
+          const dias = diffDays(tolerancia, gNext.cruzamento);
+          if (dias > 0) {
+            itens.push({
+              tipo: 'desmame',
+              rotulo: 'Atraso pós-desmame (> 4d)',
+              badgeCls: 'dnp-desmame',
+              dias,
+              periodo: `${fmtDate(tolerancia)} a ${fmtDate(gNext.cruzamento)}`,
+              ativoHoje: false,
+              obs: `Desmame em ${fmtDate(desmame)}, tolerância até ${fmtDate(tolerancia)}, nova cobertura em ${fmtDate(gNext.cruzamento)}.`,
+            });
+          }
+        } else {
+          if (!m.descarte) {
+            const dias = diffDays(tolerancia, dataFim);
+            if (dias > 0) {
+              const ativoHoje = noPlantel(m);
+              itens.push({
+                tipo: 'desmame',
+                rotulo: 'Atraso pós-desmame (> 4d)',
+                badgeCls: 'dnp-desmame',
+                dias,
+                periodo: `${fmtDate(tolerancia)} até ${ativoHoje ? 'hoje' : fmtDate(dataFim)}`,
+                ativoHoje,
+                obs: ativoHoje
+                  ? `Desmame em ${fmtDate(desmame)}, tolerância até ${fmtDate(tolerancia)}. Aguardando nova cobertura.`
+                  : `Desmame em ${fmtDate(desmame)}, saiu do plantel sem nova cobertura.`,
+              });
+            }
+          }
+        }
+
+        if (gNext && gNext.vivos != null) {
+          const ip = diffDays(parto, partoDe(gNext));
+          if (ip > 140) {
+            intervalosParto.push({
+              g1: g,
+              g2: gNext,
+              ip,
+              meta: 140,
+              excesso: ip - 140,
+              periodo: `${fmtDate(parto)} a ${fmtDate(partoDe(gNext))}`,
+              obs: `${ordinal(numeroGestacao(g))} a ${ordinal(numeroGestacao(gNext))} gestação`,
+            });
+          }
+        }
+      }
+
+      // 3. Repetição de cio
+      if (g.repeticao_cio) {
+        const fimRep = gNext ? gNext.cruzamento : dataFim;
+        const dias = Math.max(0, diffDays(g.cruzamento, fimRep));
+        const ativoHoje = noPlantel(m) && !gNext;
+        if (dias > 0 || ativoHoje) {
+          itens.push({
+            tipo: 'cio',
+            rotulo: 'Repetição de cio',
+            badgeCls: 'dnp-cio',
+            dias,
+            periodo: `${fmtDate(g.cruzamento)} a ${gNext ? fmtDate(fimRep) : (ativoHoje ? 'hoje' : fmtDate(fimRep))}`,
+            ativoHoje,
+            obs: `Cobertura em ${fmtDate(g.cruzamento)} não vingou.${gNext ? ` Nova cobertura em ${fmtDate(gNext.cruzamento)}.` : ' Aguardando nova cobertura.'}`,
+          });
+        }
+      }
+
+      // 4. Aborto
+      if (g.aborto) {
+        const dataAborto = g.aborto_data || g.parto || addDays(g.cruzamento, 60);
+        const fimAborto = gNext ? gNext.cruzamento : (dataAborto || dataFim);
+        const dias = Math.max(0, diffDays(g.cruzamento, fimAborto));
+        const ativoHoje = noPlantel(m) && !gNext && (!g.aborto_data || diffDays(g.aborto_data, hoje()) > 0);
+        if (dias > 0 || ativoHoje) {
+          itens.push({
+            tipo: 'aborto',
+            rotulo: 'Aborto',
+            badgeCls: 'dnp-aborto',
+            dias,
+            periodo: `${fmtDate(g.cruzamento)} a ${gNext ? fmtDate(gNext.cruzamento) : fmtDate(dataAborto)}`,
+            ativoHoje,
+            obs: `Cobertura em ${fmtDate(g.cruzamento)}, aborto registrado em ${fmtDate(dataAborto)}.`,
+          });
+        }
+      }
+    }
+
+    // 6. Atraso no descarte (gera DNP da decisão até a saída física)
+    if (m.descarte) {
+      let dataDecisao = m.descarte_data;
+      if (!dataDecisao) {
+        const ultG = [...gs].reverse().find((g) => g.vivos != null);
+        dataDecisao = ultG ? (ultG.desmame || addDays(partoDe(ultG), 28)) : (m.chegada || m.nascimento || hoje());
+      }
+      const fimDescarte = m.saida && m.saida_data ? m.saida_data : hoje();
+      const dias = Math.max(0, diffDays(dataDecisao, fimDescarte));
+      const ativoHoje = noPlantel(m);
+      if (dias > 0 || ativoHoje) {
+        itens.push({
+          tipo: 'descarte',
+          rotulo: 'Aguardando descarte (saída física)',
+          badgeCls: 'dnp-descarte',
+          dias,
+          periodo: `${fmtDate(dataDecisao)} até ${ativoHoje ? 'hoje' : fmtDate(fimDescarte)}`,
+          ativoHoje,
+          obs: ativoHoje
+            ? `Decisão de descarte em ${fmtDate(dataDecisao)}. Fêmea ainda não teve saída física (abate/venda).`
+            : `Decisão de descarte em ${fmtDate(dataDecisao)}, saída física em ${fmtDate(m.saida_data)}.`,
+        });
+      }
+    }
+
+    const totalDnp = itens.reduce((s, it) => s + it.dias, 0);
+    const dnpHoje = itens.some((it) => it.ativoHoje);
+
+    let motivoPrincipal = 'Sem DNP acumulado';
+    let motivoBadgeCls = 'dnp-ok';
+    const ativoItem = itens.find((it) => it.ativoHoje);
+    if (ativoItem) {
+      motivoPrincipal = ativoItem.rotulo;
+      motivoBadgeCls = ativoItem.badgeCls;
+    } else if (itens.length > 0) {
+      const maior = [...itens].sort((a, b) => b.dias - a.dias)[0];
+      motivoPrincipal = maior.rotulo;
+      motivoBadgeCls = maior.badgeCls;
+    }
+
+    return {
+      animal: m,
+      totalDnp,
+      dnpHoje,
+      motivoPrincipal,
+      motivoBadgeCls,
+      itens,
+      intervalosParto,
+    };
+  }
+
+  function calcularDnpPlantel() {
+    const femeas = sortAnimais(db.animais.filter((a) => a.categoria === 'matriz' || a.categoria === 'porca'));
+    const matrizesDnp = femeas.map(calcularDnpMatriz);
+    const totalDnp = matrizesDnp.reduce((s, d) => s + d.totalDnp, 0);
+    const matrizesNoPlantel = matrizesDnp.filter((d) => noPlantel(d.animal));
+    const gerandoHoje = matrizesDnp.filter((d) => d.dnpHoje);
+    const custoDia = obterDnpCusto();
+    const prejuizoTotal = totalDnp * custoDia;
+    const mediaPlantel = matrizesNoPlantel.length ? Math.round((matrizesNoPlantel.reduce((s, d) => s + d.totalDnp, 0) / matrizesNoPlantel.length) * 10) / 10 : 0;
+
+    return {
+      femeas,
+      matrizesDnp,
+      totalDnp,
+      matrizesNoPlantel,
+      gerandoHoje,
+      custoDia,
+      prejuizoTotal,
+      mediaPlantel,
+    };
+  }
+
+  function renderDnp() {
+    const p = calcularDnpPlantel();
+    const custo = p.custoDia;
+    const f = filters.dnp || 'todos';
+
+    const cardMedia = stat('DNP Médio do Plantel', `${fmtNum(p.mediaPlantel)} dias`, 'Média por matriz no plantel');
+    const cardTotal = stat('Total DNP Acumulado', `${fmtNum(p.totalDnp)} dias`, `${plural(p.femeas.length, 'matriz avaliada', 'matrizes avaliadas')}`);
+    const cardPrejuizo = stat('Prejuízo Estimado', fmtMoney(p.prejuizoTotal), `Base: ${fmtMoney(custo)}/dia improdutivo`, p.prejuizoTotal > 0 ? 'neg' : 'pos');
+
+    const custoBarHtml = `
+      <div class="dnp-custo-bar">
+        <div class="dnp-custo-info">
+          <strong>Custo por dia improdutivo (R$/dia)</strong>
+          <small class="muted">Configuração para estimar prejuízo diário com alimentação e manutenção sem produção.</small>
+        </div>
+        <div class="dnp-custo-controls">
+          <span class="input-affix"><i>R$</i><input type="text" id="inputDnpCusto" value="${esc(toInput(custo))}" inputmode="decimal" autocomplete="off" aria-label="Custo por dia"><i>/dia</i></span>
+          <button type="button" class="btn small primary" data-act="dnp-salvar-custo">Salvar custo</button>
+        </div>
+      </div>
+    `;
+
+    const alertaHtml = p.gerandoHoje.length ? `
+      <div class="dnp-alerta-box">
+        ${ICON.alert}
+        <div>
+          <strong>Atenção: ${p.gerandoHoje.length} ${p.gerandoHoje.length === 1 ? 'matriz está gerando DNP hoje' : 'matrizes estão gerando DNP hoje'}</strong>
+          <p class="muted small">${p.gerandoHoje.map((d) => `<strong>${esc(d.animal.nome)}</strong> (${esc(d.motivoPrincipal)})`).join(' · ')}</p>
+        </div>
+      </div>
+    ` : '';
+
+    const counts = {
+      todos: p.matrizesDnp.length,
+      hoje: p.gerandoHoje.length,
+      plantel: p.matrizesNoPlantel.length,
+      com_dnp: p.matrizesDnp.filter((d) => d.totalDnp > 0).length,
+      descarte: p.matrizesDnp.filter((d) => d.animal.descarte && noPlantel(d.animal)).length,
+    };
+
+    const chip = (v, label) => `<button type="button" class="chip${f === v ? ' on' : ''}" data-act="dnp-filtro" data-value="${v}">${label} <span class="n">${counts[v] || 0}</span></button>`;
+
+    const chipsHtml = `
+      <div class="chips">
+        ${chip('todos', 'Todas')}
+        ${chip('hoje', 'Gerando DNP hoje')}
+        ${chip('plantel', 'No plantel')}
+        ${chip('com_dnp', 'Com DNP')}
+        ${chip('descarte', 'Aguardando descarte')}
+      </div>
+    `;
+
+    const buscaHtml = p.matrizesDnp.length > 4 ? `
+      <input type="search" id="buscaDnp" class="busca" placeholder="Buscar fêmea por nome ou motivo do DNP…" aria-label="Buscar fêmea no DNP" autocomplete="off" value="${esc(buscaDnp)}">
+    ` : '';
+
+    const linhasHtml = p.matrizesDnp.map((d) => {
+      const a = d.animal;
+      const sit = noPlantel(a) ? (a.descarte ? 'descarte' : 'plantel') : (a.saida || 'saiu');
+      const buscaStr = normBusca([a.nome, d.motivoPrincipal, statusAnimal(a), a.descarte ? 'descarte' : '', d.dnpHoje ? 'hoje gerando' : ''].join(' '));
+      const prej = d.totalDnp * custo;
+
+      return `
+        <tr class="dnp-row" data-id="${a.id}" data-sit="${sit}" data-hoje="${d.dnpHoje ? '1' : '0'}" data-dnp="${d.totalDnp > 0 ? '1' : '0'}" data-busca="${esc(buscaStr)}">
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              ${fotoHtml(a)}
+              <div>
+                <strong><a href="#/animal/${a.id}">${esc(a.nome)}</a></strong>
+                <div class="small muted">${esc(CATEGORIAS[a.categoria])} · ${esc(idadeAnimal(a))}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="badge ${a.descarte && noPlantel(a) ? 'dnp-descarte' : (a.saida ? 'muted' : 'ok')}">${esc(a.descarte && noPlantel(a) ? 'Aguardando descarte' : statusAnimal(a))}</span>
+          </td>
+          <td>
+            <div class="dnp-dias-destaque${d.totalDnp > 0 ? ' com-dnp' : ''}">${d.totalDnp} ${d.totalDnp === 1 ? 'dia' : 'dias'}</div>
+          </td>
+          <td class="num">
+            <span class="${prej > 0 ? 'danger-text' : 'muted'}">${fmtMoney(prej)}</span>
+          </td>
+          <td>
+            <span class="badge ${d.motivoBadgeCls}">${esc(d.motivoPrincipal)}</span>
+          </td>
+          <td>
+            ${d.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>'}
+          </td>
+          <td style="text-align:right;">
+            <button type="button" class="btn small" data-act="dnp-detalhes" data-id="${a.id}">${ICON.eye} Detalhes</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    const tabelaHtml = `
+      <div class="table-wrap">
+        <table class="table" id="dnpTabela">
+          <thead>
+            <tr>
+              <th>Matriz</th>
+              <th>Situação</th>
+              <th>DNP Total</th>
+              <th class="num">Prejuízo Est.</th>
+              <th>Motivo Principal</th>
+              <th>Status Hoje</th>
+              <th style="text-align:right;">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhasHtml}
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-box" id="dnpVazio" hidden><p id="dnpVazioTxt">Nenhuma matriz encontrada.</p></div>
+    `;
+
+    return `
+      ${pageHead('Dias Não Produtivos (DNP)', 'Manejo reprodutivo, dias improdutivos acumulados e prejuízo estimado do plantel.')}
+      <div class="stats">${cardMedia}${cardTotal}${cardPrejuizo}</div>
+      ${custoBarHtml}
+      ${alertaHtml}
+      ${chipsHtml}
+      ${buscaHtml}
+      ${p.matrizesDnp.length ? tabelaHtml : '<div class="empty-box"><p>Nenhuma matriz cadastrada.</p></div>'}
+    `;
+  }
+
+  function filtrarDnp() {
+    const tabela = $('#dnpTabela');
+    const vazio = $('#dnpVazio');
+    if (!tabela || !vazio) return;
+    const q = normBusca(buscaDnp.trim());
+    const f = filters.dnp || 'todos';
+    let n = 0;
+
+    tabela.querySelectorAll('tbody tr').forEach((tr) => {
+      let ok = true;
+      if (q) {
+        ok = tr.dataset.busca.includes(q);
+      } else {
+        if (f === 'hoje') ok = tr.dataset.hoje === '1';
+        else if (f === 'plantel') ok = tr.dataset.sit === 'plantel' || tr.dataset.sit === 'descarte';
+        else if (f === 'com_dnp') ok = tr.dataset.dnp === '1';
+        else if (f === 'descarte') ok = tr.dataset.sit === 'descarte';
+      }
+      tr.hidden = !ok;
+      if (ok) n++;
+    });
+
+    vazio.hidden = n > 0;
+    $('#dnpVazioTxt').textContent = q ? `Nenhuma matriz encontrada com “${buscaDnp.trim()}”.` : 'Nenhuma matriz aqui.';
+    $$('.chips .chip', view).forEach((c) => c.classList.toggle('dim', !!q));
+  }
+
+  function abrirDnpDetalhes(id) {
+    const a = animal(id);
+    if (!a) return;
+    const dnp = calcularDnpMatriz(a);
+    const custo = obterDnpCusto();
+    const dlg = $('#dnpDlg');
+    if (!dlg) return;
+
+    $('#dnpDlgTitle').textContent = `DNP: ${a.nome}`;
+    $('#dnpDlgMeta').textContent = `${CATEGORIAS[a.categoria]} · ${a.descarte && noPlantel(a) ? 'Aguardando descarte' : statusAnimal(a)}`;
+
+    const prej = dnp.totalDnp * custo;
+
+    let html = `
+      <div class="dnp-resumo-banner">
+        <div class="dnp-resumo-item">
+          <small>Total DNP</small>
+          <strong class="${dnp.totalDnp > 0 ? 'danger-text' : 'pos-text'}">${dnp.totalDnp} ${dnp.totalDnp === 1 ? 'dia' : 'dias'}</strong>
+        </div>
+        <div class="dnp-resumo-item">
+          <small>Prejuízo Estimado</small>
+          <strong class="${prej > 0 ? 'danger-text' : 'pos-text'}">${fmtMoney(prej)}</strong>
+        </div>
+        <div class="dnp-resumo-item">
+          <small>Status Hoje</small>
+          <strong>${dnp.dnpHoje ? '<span class="badge dnp-ativo">⚠️ Gerando DNP hoje</span>' : '<span class="badge ok">Sem DNP ativo</span>'}</strong>
+        </div>
+        <div class="dnp-resumo-item">
+          <small>Motivo Principal</small>
+          <strong><span class="badge ${dnp.motivoBadgeCls}">${esc(dnp.motivoPrincipal)}</span></strong>
+        </div>
+      </div>
+    `;
+
+    html += `<h3 class="dnp-secao-titulo">${ICON.calendar} Períodos improdutivos detalhados</h3>`;
+    if (!dnp.itens.length) {
+      html += '<p class="muted">Nenhum dia não produtivo registrado para esta matriz.</p>';
+    } else {
+      html += `<div class="dnp-lista">${dnp.itens.map((it) => `
+        <div class="dnp-item${it.ativoHoje ? ' ativo-hoje' : ''}">
+          <div class="dnp-item-head">
+            <span class="dnp-item-motivo"><span class="badge ${it.badgeCls}">${esc(it.rotulo)}</span>${it.ativoHoje ? '<span class="badge dnp-ativo">Gerando DNP hoje</span>' : ''}</span>
+            <span class="dnp-item-dias">${plural(it.dias, 'dia', 'dias')} (${fmtMoney(it.dias * custo)})</span>
+          </div>
+          <div class="dnp-item-periodo">Período: <strong>${esc(it.periodo)}</strong></div>
+          ${it.obs ? `<div class="dnp-item-obs muted">${esc(it.obs)}</div>` : ''}
+        </div>
+      `).join('')}</div>`;
+    }
+
+    if (dnp.intervalosParto.length) {
+      html += `<h3 class="dnp-secao-titulo" style="margin-top: 10px;">${ICON.pig} Intervalo de Partos (IP > 140 dias)</h3>
+      <div class="dnp-lista">${dnp.intervalosParto.map((ip) => `
+        <div class="dnp-item">
+          <div class="dnp-item-head">
+            <span class="dnp-item-motivo"><span class="badge dnp-ip">${esc(ip.obs)}</span></span>
+            <span class="dnp-item-dias">${ip.ip} dias (${ip.excesso}d acima da meta)</span>
+          </div>
+          <div class="dnp-item-periodo">Partos: <strong>${esc(ip.periodo)}</strong></div>
+          <div class="dnp-item-obs muted">Meta recomendada: ~140 dias entre partos. O excesso de ${ip.excesso} dias reduz a eficiência reprodutiva do ciclo.</div>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    $('#dnpDlgBody').innerHTML = html;
+    dlg.showModal();
   }
 
   // ---------- Conta, Grupos e Convites ----------
@@ -1896,7 +2409,7 @@
     const gestacoes = sortByDate(db.gestacoes.filter((g) => g.vivos != null && (!a || g.matriz_id !== a.id)), 'parto', true);
     openForm({
       title: novo ? 'Novo animal' : `Editar ${a.nome}`,
-      values: a ? { ...a, saida: a.saida || '' } : { categoria: 'porco', aquisicao: 'nascido', saida: '' },
+      values: a ? { ...a, saida: a.saida || '', descarte: !!a.descarte, descarte_data: a.descarte_data || '' } : { categoria: 'porco', aquisicao: 'nascido', saida: '', descarte: false, descarte_data: '' },
       fields: [
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Pintada' },
         { name: 'categoria', label: 'Categoria', type: 'select', half: true, options: Object.entries(CATEGORIAS) },
@@ -1907,6 +2420,8 @@
         { name: 'chegada', label: 'Chegada', type: 'date', half: true, showIf: (v) => v.aquisicao !== 'nascido' },
         { name: 'negociado_com', label: 'Negociado com', half: true, showIf: (v) => v.aquisicao !== 'nascido', placeholder: 'Pessoa' },
         { name: 'valor_compra', label: 'Valor de compra', type: 'money', half: true, showIf: (v) => v.aquisicao === 'comprado' },
+        { name: 'descarte', label: 'Marcada para descarte (gera DNP até a saída física)', type: 'checkbox', showIf: (v) => v.categoria === 'matriz' || v.categoria === 'porca' },
+        { name: 'descarte_data', label: 'Data da decisão de descarte', type: 'date', half: true, showIf: (v) => (v.categoria === 'matriz' || v.categoria === 'porca') && !!v.descarte },
         { name: 'saida', label: 'Situação', type: 'select', options: [['', 'No plantel'], ['venda', 'Vendido'], ['abate', 'Abatido'], ['morte', 'Morreu']] },
         { name: 'saida_data', label: 'Data da saída', type: 'date', half: true, required: true, showIf: (v) => !!v.saida },
         { name: 'valor_venda', label: 'Valor da venda', type: 'money', half: true, showIf: (v) => v.saida === 'venda' },
@@ -1926,6 +2441,8 @@
           chegada: nasc ? null : v.chegada,
           negociado_com: nasc ? '' : v.negociado_com,
           valor_compra: v.aquisicao === 'comprado' ? v.valor_compra : null,
+          descarte: !!v.descarte,
+          descarte_data: v.descarte ? (v.descarte_data || hoje()) : null,
           saida: v.saida || null,
           saida_data: v.saida ? v.saida_data : null,
           valor_venda: v.saida === 'venda' ? v.valor_venda : null,
@@ -1981,33 +2498,46 @@
     openForm({
       title: novo ? 'Nova gestação' : 'Gestação',
       intro: `Enquanto o dia do parto ficar em branco, a previsão é o cruzamento + ${GESTACAO_DIAS} dias (e acompanha se mudar o cruzamento).`,
-      values: g || { matriz_id: matrizId || (matrizes[0] && matrizes[0].id), cruzamento: hoje() },
+      values: g ? { ...g, aborto: !!g.aborto, aborto_data: g.aborto_data || '', repeticao_cio: !!g.repeticao_cio, desmame: g.desmame || '' } : { matriz_id: matrizId || (matrizes[0] && matrizes[0].id), cruzamento: hoje(), aborto: false, aborto_data: '', repeticao_cio: false, desmame: '' },
       fields: [
         { name: 'matriz_id', label: 'Matriz', type: 'select', half: true, required: true, options: animalOptions(matrizes) },
         { name: 'barrao_id', label: 'Barrão (pai)', type: 'select', half: true, options: [['', '— (não informado)'], ...barroes] },
         { name: 'cruzamento', label: 'Cruzamento', type: 'date', half: true, required: true },
-        { name: 'parto', label: 'Parto', type: 'date', half: true, hint: ' ' },
-        { name: 'vivos', label: 'Vivos', type: 'number', half: true, hint: 'Em branco = ainda não nasceu' },
-        { name: 'mortos', label: 'Mortos', type: 'number', half: true, hint: ' ' },
-        { name: 'machos', label: 'Machos', type: 'number', half: true },
-        { name: 'femeas', label: 'Fêmeas', type: 'number', half: true },
-        { name: 'capacao', label: 'Capação', type: 'date', half: true },
+        { name: 'repeticao_cio', label: 'Repetição de cio (cobertura falhou / não emprenhou)', type: 'checkbox', showIf: (v) => !v.aborto },
+        { name: 'aborto', label: 'Houve aborto', type: 'checkbox', showIf: (v) => !v.repeticao_cio },
+        { name: 'aborto_data', label: 'Data do aborto', type: 'date', half: true, showIf: (v) => !!v.aborto },
+        { name: 'parto', label: 'Parto', type: 'date', half: true, hint: ' ', showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'desmame', label: 'Desmame dos leitões', type: 'date', half: true, hint: 'Em branco = 28 dias após o parto', showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'vivos', label: 'Vivos', type: 'number', half: true, hint: 'Em branco = ainda não nasceu', showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'mortos', label: 'Mortos', type: 'number', half: true, hint: ' ', showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'machos', label: 'Machos', type: 'number', half: true, showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'femeas', label: 'Fêmeas', type: 'number', half: true, showIf: (v) => !v.aborto && !v.repeticao_cio },
+        { name: 'capacao', label: 'Capação', type: 'date', half: true, showIf: (v) => !v.aborto && !v.repeticao_cio },
         { name: 'obs', label: 'Observações', type: 'textarea' },
       ],
       onSave: async (v) => {
-        const ints = ['vivos', 'mortos', 'machos', 'femeas'];
-        for (const k of ints) {
-          if (v[k] != null && (!Number.isInteger(v[k]) || v[k] < 0)) throw new Error('Use números inteiros nas quantidades.');
+        if (!v.aborto && !v.repeticao_cio) {
+          const ints = ['vivos', 'mortos', 'machos', 'femeas'];
+          for (const k of ints) {
+            if (v[k] != null && (!Number.isInteger(v[k]) || v[k] < 0)) throw new Error('Use números inteiros nas quantidades.');
+          }
+          if (v.vivos == null && v.mortos != null) throw new Error('Preencha os vivos (pode ser 0) para registrar o parto.');
         }
-        if (v.vivos == null && v.mortos != null) throw new Error('Preencha os vivos (pode ser 0) para registrar o parto.');
         const row = {
           matriz_id: v.matriz_id,
           barrao_id: v.barrao_id || null,
           cruzamento: v.cruzamento,
+          aborto: !!v.aborto,
+          aborto_data: v.aborto ? (v.aborto_data || hoje()) : null,
+          repeticao_cio: !!v.repeticao_cio,
           // Sem data: fica a previsão (cruzamento + 114). Depois do parto registrado, a data fica fixa.
-          parto: v.parto || (v.vivos != null ? addDays(v.cruzamento, GESTACAO_DIAS) : null),
-          vivos: v.vivos, mortos: v.mortos, machos: v.machos, femeas: v.femeas,
-          capacao: v.capacao,
+          parto: (v.aborto || v.repeticao_cio) ? null : (v.parto || (v.vivos != null ? addDays(v.cruzamento, GESTACAO_DIAS) : null)),
+          desmame: (v.aborto || v.repeticao_cio) ? null : (v.desmame || null),
+          vivos: (v.aborto || v.repeticao_cio) ? null : v.vivos,
+          mortos: (v.aborto || v.repeticao_cio) ? null : v.mortos,
+          machos: (v.aborto || v.repeticao_cio) ? null : v.machos,
+          femeas: (v.aborto || v.repeticao_cio) ? null : v.femeas,
+          capacao: (v.aborto || v.repeticao_cio) ? null : v.capacao,
           obs: v.obs,
         };
         await save('gestacoes', g && g.id, row);
@@ -2766,7 +3296,7 @@
 
   // Data "AAAA-MM-DD" -> número de série do Excel (dias desde 30/12/1899), sem depender do fuso horário.
   // As colunas de data recebem o formato dd/mm/aaaa em exportarExcel.
-  const COLUNAS_DATA = new Set(['Data', 'Nascimento', 'Chegada', 'Data da saída', 'Cruzamento', 'Parto', 'Capação']);
+  const COLUNAS_DATA = new Set(['Data', 'Nascimento', 'Chegada', 'Data da saída', 'Cruzamento', 'Parto', 'Capação', 'Desmame', 'Data do descarte', 'Data do aborto']);
   function xDate(s) {
     if (!s) return null;
     const [y, m, d] = String(s).slice(0, 10).split('-').map(Number);
@@ -2875,10 +3405,23 @@
       Data: xDate(d.criado_em ? d.criado_em.slice(0, 10) : null),
       Observações: d.obs || '',
     }));
+    const dnpPlantel = calcularDnpPlantel();
+    const dnpExcel = dnpPlantel.matrizesDnp.map((d) => ({
+      Matriz: d.animal.nome,
+      Situação: d.animal.descarte && noPlantel(d.animal) ? 'Aguardando descarte' : statusAnimal(d.animal),
+      'Total DNP (dias)': d.totalDnp,
+      'Prejuízo estimado': d.totalDnp * dnpPlantel.custoDia,
+      'Motivo principal': d.motivoPrincipal,
+      'Gerando DNP hoje': d.dnpHoje ? 'Sim' : 'Não',
+      'Descarte planejado': d.animal.descarte ? 'Sim' : 'Não',
+      'Data do descarte': xDate(d.animal.descarte_data),
+      'Períodos improdutivos': d.itens.map((it) => `${it.rotulo}: ${it.dias}d (${it.periodo})`).join('; ') || 'Nenhum',
+    }));
     const dinheiroAbates = Object.keys(abates[0] || {}).filter((k) => k.endsWith('(R$)') || k === 'Valor total');
     return [
       { nome: 'Animais', linhas: animais, dinheiro: ['Valor de compra', 'Valor da venda'] },
       { nome: 'Gestações', linhas: gestacoes },
+      { nome: 'DNP', linhas: dnpExcel, dinheiro: ['Prejuízo estimado'] },
       { nome: 'Aplicações', linhas: aplicacoes },
       { nome: 'Vacinas e remédios', linhas: produtos },
       { nome: 'Abates', linhas: abates, dinheiro: dinheiroAbates },
@@ -3212,6 +3755,21 @@
         toast(errMsg(err));
       }
     },
+    'dnp-detalhes': (el) => abrirDnpDetalhes(el.dataset.id),
+    'dnp-filtro': (el) => { filters.dnp = el.dataset.value; render(); },
+    'dnp-salvar-custo': () => {
+      const inp = $('#inputDnpCusto');
+      if (inp) {
+        const val = parseNum(inp.value);
+        if (val == null || Number.isNaN(val) || val < 0) {
+          toast('Digite um valor numérico válido para o custo por dia.');
+          return;
+        }
+        salvarDnpCusto(val);
+        toast(`Custo atualizado para ${fmtMoney(val)}/dia`);
+        render();
+      }
+    },
     exportar: (el) => exportarExcel(el),
     'exportar-json': () => exportarJson(),
     'exportar-zip': (el) => exportarZip(el),
@@ -3314,6 +3872,11 @@
   });
 
   view.addEventListener('input', (e) => {
+    if (e.target.id === 'buscaDnp') {
+      buscaDnp = e.target.value;
+      filtrarDnp();
+      return;
+    }
     if (e.target.id === 'buscaAnimais') {
       buscaAnimais = e.target.value;
       filtrarAnimais();
@@ -3697,6 +4260,8 @@
       if (dlg.open) dlg.close();
       const vDlg = $('#viewerDlg');
       if (vDlg && vDlg.open) vDlg.close();
+      const dDlg = $('#dnpDlg');
+      if (dDlg && dDlg.open) dDlg.close();
       onRoute();
     });
     const btnG = $('#btnGrupo');
@@ -3751,6 +4316,20 @@
           rect.left <= e.clientX && e.clientX <= rect.left + rect.width
         );
         if (!inDialog) viewerDlg.close();
+      });
+    }
+
+    const dnpDlg = $('#dnpDlg');
+    const dnpClose = $('#dnpDlgCloseBtn');
+    if (dnpClose && dnpDlg) {
+      dnpClose.addEventListener('click', () => dnpDlg.close());
+      dnpDlg.addEventListener('click', (e) => {
+        const rect = dnpDlg.getBoundingClientRect();
+        const inDialog = (
+          rect.top <= e.clientY && e.clientY <= rect.top + rect.height &&
+          rect.left <= e.clientX && e.clientX <= rect.left + rect.width
+        );
+        if (!inDialog) dnpDlg.close();
       });
     }
 

@@ -208,6 +208,8 @@ create table if not exists public.porcos_animais (
   saida text check (saida in ('venda', 'abate', 'morte')),
   saida_data date,
   valor_venda numeric(12, 2),
+  descarte boolean default false,
+  descarte_data date,
   foto text,
   obs text not null default '',
   ordem int not null default 0,
@@ -227,6 +229,10 @@ create table if not exists public.porcos_gestacoes (
   femeas int check (femeas >= 0),
   mortos int check (mortos >= 0),
   capacao date,
+  desmame date,
+  aborto boolean default false,
+  aborto_data date,
+  repeticao_cio boolean default false,
   obs text not null default '',
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now(),
@@ -326,6 +332,14 @@ alter table public.porcos_abates add column if not exists grupo_id uuid referenc
 alter table public.porcos_lancamentos add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
 alter table public.porcos_racoes add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
 alter table public.porcos_documentos add column if not exists grupo_id uuid references public.porcos_grupos (id) on delete cascade;
+
+-- DNP (Dias Não Produtivos), Descarte e Manejo Reprodutivo
+alter table public.porcos_animais add column if not exists descarte boolean default false;
+alter table public.porcos_animais add column if not exists descarte_data date;
+alter table public.porcos_gestacoes add column if not exists desmame date;
+alter table public.porcos_gestacoes add column if not exists aborto boolean default false;
+alter table public.porcos_gestacoes add column if not exists aborto_data date;
+alter table public.porcos_gestacoes add column if not exists repeticao_cio boolean default false;
 
 -- Índices de grupo
 create index if not exists porcos_animais_grupo_idx on public.porcos_animais (grupo_id);
