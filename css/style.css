@@ -1435,14 +1435,15 @@ dialog.viewer-dialog[open] {
 
 /* Modal de Detalhamento e Extrato de DNP */
 dialog.dnp-dialog {
-  width: min(720px, calc(100vw - 20px));
+  width: min(580px, calc(100vw - 20px));
   max-width: calc(100vw - 20px);
-  max-height: min(88vh, 800px);
+  max-height: calc(100dvh - 36px);
+  margin: auto;
   padding: 0;
-  border-radius: var(--radius);
+  border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--surface);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1451,36 +1452,58 @@ dialog.dnp-dialog {
 dialog.dnp-dialog:not([open]) { display: none; }
 dialog.dnp-dialog[open] { display: flex; }
 
-.dnp-dialog .viewer-head {
+.dnp-dlg-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
-  background: var(--surface-2);
+  padding: 16px 18px;
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   box-sizing: border-box;
   width: 100%;
-  max-width: 100%;
 }
-.dnp-dialog .viewer-info {
+.dnp-dlg-titles {
   min-width: 0;
   flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.dnp-dialog .viewer-info h2 {
+.dnp-dlg-title {
   margin: 0;
   font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dnp-dialog .doc-sub {
+.dnp-dlg-meta {
   font-size: 0.8rem;
   color: var(--muted);
-  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dnp-dlg-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+.dnp-dlg-close:hover {
+  background: var(--line);
+  color: var(--ink);
 }
 
 .dnp-dialog-body {
@@ -1489,7 +1512,7 @@ dialog.dnp-dialog[open] { display: flex; }
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
@@ -1497,166 +1520,233 @@ dialog.dnp-dialog[open] { display: flex; }
   -webkit-overflow-scrolling: touch;
 }
 
-.dnp-resumo-banner {
+/* KPIs de Resumo no Topo do Extrato */
+.dnp-extrato-kpis {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  padding: 12px 14px;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.dnp-extrato-kpi-card {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+.dnp-extrato-kpi-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.dnp-extrato-kpi-val {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+.dnp-extrato-kpi-badge {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
+.dnp-extrato-kpi-badge .badge {
+  font-size: 0.76rem;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.dnp-extrato-motivo-banner {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border-left: 3px solid var(--accent);
+  box-sizing: border-box;
+  width: 100%;
+}
+.dnp-extrato-motivo-banner strong {
+  color: var(--ink);
+}
+
+.dnp-extrato-secao-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 4px;
+  margin-bottom: -2px;
+}
+
+/* Cards do Extrato (Mobile-First em 2 Linhas) */
+.dnp-extrato-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dnp-extrato-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.dnp-extrato-card.ativo {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: color-mix(in srgb, var(--danger-bg) 18%, var(--surface));
+}
+
+.dnp-extrato-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dnp-extrato-evento {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.dnp-extrato-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+.dnp-extrato-dot.dnp-marra { background: #ef4444; }
+.dnp-extrato-dot.dnp-desmame { background: #f97316; }
+.dnp-extrato-dot.dnp-cio { background: #f59e0b; }
+.dnp-extrato-dot.dnp-aborto { background: #ec4899; }
+.dnp-extrato-dot.dnp-descarte { background: #a855f7; }
+.dnp-extrato-dot.dnp-ip { background: #0ea5e9; }
+
+.dnp-extrato-titulo {
+  font-weight: 600;
+  font-size: 0.91rem;
+  color: var(--ink);
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.dnp-extrato-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.dnp-extrato-status .badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 0.74rem;
+  padding: 2px 7px;
+}
+
+.dnp-extrato-base {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: 15px;
+}
+
+.dnp-extrato-metas {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.81rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.dnp-extrato-dias {
+  color: var(--ink);
+  font-weight: 600;
+}
+.dnp-extrato-dias strong {
+  font-family: var(--display);
+  font-size: 0.88rem;
+}
+
+.dnp-extrato-sep {
+  opacity: 0.4;
+  font-size: 0.65rem;
+}
+
+.dnp-extrato-periodo {
+  color: var(--muted);
+  font-size: 0.79rem;
+}
+
+.dnp-extrato-obs {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+/* Banner de Resumo da Matriz (aba de animais) */
+.dnp-resumo-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 .dnp-resumo-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: 2px;
 }
 .dnp-resumo-item small {
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  font-weight: 600;
 }
 .dnp-resumo-item strong {
-  font-size: 1.1rem;
-  font-family: var(--display);
+  font-size: 1.15rem;
 }
-.dnp-resumo-badge-wrap {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-}
-.dnp-resumo-badge-wrap .badge {
-  max-width: 100%;
-  white-space: normal;
-  line-height: 1.25;
-  text-align: left;
-  word-break: break-word;
-}
-
-.dnp-secao-titulo {
-  font-size: 0.95rem;
-  font-weight: 700;
-  margin-top: 4px;
-  margin-bottom: 2px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-}
-
-.dnp-lista {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.dnp-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-}
-.dnp-item.ativo-hoje {
-  border-color: rgba(239, 68, 68, 0.5);
-  background: color-mix(in srgb, var(--danger-bg) 20%, var(--surface));
-}
-
-.dnp-item-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.dnp-item-desc {
-  flex: 1 1 0%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.dnp-item-desc .badge,
-.dnp-evento-badge {
-  max-width: 100%;
-  white-space: normal;
-  text-align: left;
-  line-height: 1.35;
-  word-break: break-word;
-  padding: 3px 8px;
-}
-
-.dnp-item-status {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-}
-
-.dnp-item-status .badge {
-  flex-shrink: 0;
-  white-space: nowrap;
-  font-size: 0.76rem;
-  padding: 3px 8px;
-}
-
-.dnp-item-base {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.dnp-item-metas {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 0.83rem;
-  color: var(--muted);
-  line-height: 1.4;
-}
-
-.dnp-item-dias strong {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 0.92rem;
-}
-
-.dnp-item-sep {
-  opacity: 0.45;
-}
-
-.dnp-item-periodo {
-  color: var(--muted);
-}
-
-.dnp-item-obs {
-  font-size: 0.78rem;
-  line-height: 1.35;
-  word-break: break-word;
+@media (max-width: 600px) {
+  .dnp-resumo-banner {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px;
+  }
+  .dnp-resumo-banner .dnp-resumo-item:last-child {
+    grid-column: span 2;
+  }
 }
 
 @media (max-width: 600px) {
@@ -1664,80 +1754,68 @@ dialog.dnp-dialog[open] { display: flex; }
     width: calc(100vw - 16px);
     max-width: calc(100vw - 16px);
     max-height: calc(100dvh - 20px);
+    border-radius: 16px;
     margin: auto;
-    border-radius: 14px;
-    box-sizing: border-box;
-    overflow-x: hidden;
   }
-  .dnp-dialog .viewer-head {
-    padding: 10px 12px;
+  .dnp-dlg-head {
+    padding: 12px 14px;
+  }
+  .dnp-dlg-title {
+    font-size: 1.05rem;
   }
   .dnp-dialog-body {
     padding: 12px 14px calc(24px + env(safe-area-inset-bottom, 0px));
-    gap: 12px;
+    gap: 10px;
   }
-  .dnp-resumo-banner {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 10px 12px;
-  }
-  .dnp-resumo-item {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--line);
-  }
-  .dnp-resumo-item:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-  }
-  .dnp-item {
-    padding: 10px 12px;
-    gap: 6px;
-  }
-  .dnp-item-top {
-    gap: 8px;
-  }
-  .dnp-item-metas {
-    font-size: 0.8rem;
-    gap: 4px;
+  .dnp-extrato-card {
+    padding: 9px 11px;
   }
 }
 
+/* OLED Dark Mode */
 :root:not([data-theme='light']) dialog.dnp-dialog,
 .dark dialog.dnp-dialog {
   background: #000000;
   border-color: #1f1f1f;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.9);
 }
-:root:not([data-theme='light']) .dnp-dialog .viewer-head,
-.dark .dnp-dialog .viewer-head {
-  background: #0a0a0a;
+:root:not([data-theme='light']) .dnp-dlg-head,
+.dark .dnp-dlg-head {
+  background: #000000;
   border-bottom-color: #1f1f1f;
 }
-:root:not([data-theme='light']) .dnp-resumo-banner,
-.dark .dnp-resumo-banner {
+:root:not([data-theme='light']) .dnp-dlg-close,
+.dark .dnp-dlg-close {
+  background: #111111;
+  border-color: #222222;
+  color: #a0a0a0;
+}
+:root:not([data-theme='light']) .dnp-dlg-close:hover,
+.dark .dnp-dlg-close:hover {
+  background: #1a1a1a;
+  color: #ffffff;
+}
+:root:not([data-theme='light']) .dnp-extrato-kpi-card,
+.dark .dnp-extrato-kpi-card {
   background: #0a0a0a;
   border-color: #1f1f1f;
 }
-:root:not([data-theme='light']) .dnp-resumo-item,
-.dark .dnp-resumo-item {
-  border-bottom-color: #1f1f1f;
+:root:not([data-theme='light']) .dnp-extrato-motivo-banner,
+.dark .dnp-extrato-motivo-banner {
+  background: #0a0a0a;
 }
-:root:not([data-theme='light']) .dnp-item,
-.dark .dnp-item {
+:root:not([data-theme='light']) .dnp-extrato-card,
+.dark .dnp-extrato-card {
   background: #0a0a0a;
   border-color: #1f1f1f;
 }
-:root:not([data-theme='light']) .dnp-item.ativo-hoje,
-.dark .dnp-item.ativo-hoje {
+:root:not([data-theme='light']) .dnp-extrato-card.ativo,
+.dark .dnp-extrato-card.ativo {
   border-color: rgba(239, 68, 68, 0.45);
   background: rgba(239, 68, 68, 0.08);
 }
-:root:not([data-theme='light']) .dnp-item-dias,
-.dark .dnp-item-dias {
+:root:not([data-theme='light']) .dnp-extrato-dias,
+.dark .dnp-extrato-dias {
   color: #f5f5f5;
 }
 

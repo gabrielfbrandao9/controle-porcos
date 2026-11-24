@@ -120,12 +120,14 @@
 
   <!-- Detalhamento de DNP -->
   <dialog id="dnpDlg" class="dnp-dialog">
-    <div class="viewer-head">
-      <div class="viewer-info">
-        <h2 id="dnpDlgTitle">Detalhamento de DNP</h2>
-        <div id="dnpDlgMeta" class="doc-sub"></div>
+    <div class="dnp-dlg-head">
+      <div class="dnp-dlg-titles">
+        <h2 id="dnpDlgTitle" class="dnp-dlg-title">Extrato de DNP</h2>
+        <div id="dnpDlgMeta" class="dnp-dlg-meta"></div>
       </div>
-      <button type="button" class="icon" id="dnpDlgCloseBtn" aria-label="Fechar">×</button>
+      <button type="button" class="dnp-dlg-close" id="dnpDlgCloseBtn" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
     <div class="dnp-dialog-body" id="dnpDlgBody"></div>
   </dialog>
