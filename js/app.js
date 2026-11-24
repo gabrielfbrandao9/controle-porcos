@@ -926,9 +926,8 @@
 
     const min3 = peso * 0.97;
     const max3 = peso * 1.03;
-    const consumoEst = peso * 0.03;
 
-    return { c, l, k, expC, expL, peso, min3, max3, consumoEst };
+    return { c, l, k, expC, expL, peso, min3, max3 };
   }
 
   const fmtKg1 = (v) => (v == null || Number.isNaN(v) ? '—' : `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`);
@@ -944,7 +943,7 @@
         </div>`;
     }
 
-    const { c, l, k, expC, expL, peso, min3, max3, consumoEst } = res;
+    const { c, l, k, expC, expL, peso, min3, max3 } = res;
     const cStr = c.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const lStr = l.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const kStr = k.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
@@ -956,28 +955,6 @@
       const parteC = expC === 1 ? cStr : `${cStr}<sup>${expC}</sup>`;
       const parteL = expL === 1 ? lStr : `${lStr}<sup>${expL}</sup>`;
       expressaoMath = `${parteC} × ${parteL} × ${kStr} = <strong>${fmtKg1(peso)}</strong>`;
-    }
-
-    // Sugestão de fase da ração
-    const racoes = racoesOrdenadas();
-    let faseSugerida = null;
-    if (racoes.length > 0) {
-      for (const r of racoes) {
-        const nums = (r.faixa || '').match(/\d+/g);
-        if (nums && nums.length >= 2) {
-          const minF = Math.min(...nums.map(Number));
-          const maxF = Math.max(...nums.map(Number));
-          if (peso >= minF && peso <= maxF) {
-            faseSugerida = r;
-            break;
-          }
-        }
-      }
-      if (!faseSugerida) {
-        if (peso < 25) faseSugerida = racoes[0];
-        else if (peso < 60) faseSugerida = racoes[Math.min(1, racoes.length - 1)];
-        else faseSugerida = racoes[racoes.length - 1];
-      }
     }
 
     return `
@@ -997,21 +974,6 @@
           <span>• <strong>Comprimento (L):</strong> ${fmtM2(l)} (${Math.round(l * 100)} cm)${expL !== 1 ? ` com expoente ${expL} = ${(Math.pow(l, expL)).toFixed(4)}` : ''}</span>
           <span>• <strong>Constante K:</strong> ${kStr} (fator multiplicador padrão SOS Suínos)</span>
           <span>• <strong>Margem de erro estimada:</strong> ±3% para animais em estação e postura natural.</span>
-        </div>
-      </div>
-
-      <div class="peso-racao-integration">
-        <div class="peso-racao-info">
-          <div>
-            <strong>Consumo diário estimado (~3% PV):</strong>
-            <span style="font-family: var(--mono); font-weight: 700; margin-left: 4px;">~${fmtKg1(consumoEst)}/dia</span>
-          </div>
-          ${faseSugerida ? `<div><small class="muted">Fase recomendada:</small> <strong>${esc(faseSugerida.fase)}</strong>${faseSugerida.faixa ? ` <small class="muted">(${esc(faseSugerida.faixa)})</small>` : ''}</div>` : ''}
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
-          <button type="button" class="btn primary" data-act="peso-aplicar-racao" data-peso="${peso.toFixed(1)}" title="Aplica este peso no cálculo da mistura de ração">
-            ⚖️ Usar ${fmtKg1(peso)} no Cálculo de Ração
-          </button>
         </div>
       </div>`;
   }
@@ -4083,16 +4045,6 @@
     'peso-cancelar-formula': () => {
       pesoEditandoFormula = false;
       render();
-    },
-    'peso-aplicar-racao': (el) => {
-      const pesoNum = parseFloat(el.dataset.peso);
-      if (pesoNum && !Number.isNaN(pesoNum)) {
-        racaoQtd = Math.round(pesoNum);
-        racaoModo = 'total';
-        racaoAba = 'racao';
-        toast(`Definido ${racaoQtd} kg no Total da Mistura de Ração`);
-        render();
-      }
     },
     bloco: (el) => toggleBloco(el),
     'saude-animais': (el) => setSaude('animais', el.dataset.value),
