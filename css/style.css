@@ -438,6 +438,287 @@ button.dose:hover { border-color: var(--accent); }
 .racao header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .racao header .icon { margin: -8px -10px 0 0; }
 
+/* ---------- Peso Estimado sem Balança ---------- */
+
+.view-switch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 20px;
+}
+
+.peso-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+@media (max-width: 768px) {
+  .peso-grid { grid-template-columns: 1fr; }
+}
+
+.peso-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.peso-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+.peso-card-header h2 {
+  font-size: 1.1rem;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.peso-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.peso-field label, .peso-field > span {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+.peso-field select, .peso-field input {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 0.95rem var(--sans);
+}
+.peso-field select:focus, .peso-field input:focus {
+  border-color: var(--accent);
+}
+.peso-field-input-wrap {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.peso-field-input-wrap input {
+  width: 100%;
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  padding-right: 75px;
+}
+.peso-field-input-wrap .unit {
+  position: absolute;
+  right: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.peso-display-box {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.peso-display-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.peso-display-value {
+  font-family: var(--display);
+  font-size: 2.8rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+}
+.peso-display-value small {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.peso-display-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.peso-calc-breakdown {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.peso-calc-formula-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.peso-calc-math {
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+  word-break: break-all;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+.peso-calc-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.peso-calc-legend span strong {
+  color: var(--ink);
+}
+
+.peso-racao-integration {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.peso-racao-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.peso-racao-info strong {
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+.peso-racao-info small {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.peso-config-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow);
+}
+.peso-config-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.peso-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.peso-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.peso-guia-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-top: 20px;
+}
+.peso-guia-card h3 {
+  font-size: 1.05rem;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.peso-guia-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+.peso-guia-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.peso-guia-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex: none;
+}
+.peso-guia-text strong {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.peso-guia-text p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 /* ---------- Conta ---------- */
 
 .account-card { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }

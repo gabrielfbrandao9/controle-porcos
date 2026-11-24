@@ -109,6 +109,8 @@
   let racaoModo = 'total';
   let racaoQtd = 100;
   let racaoIng = 'Milho';
+  let racaoAba = 'racao'; // 'racao' | 'peso'
+  let pesoEditandoFormula = false;
   let toastTimer = null;
 
   const canEdit = () => papel === 'dono' || papel === 'editor';
@@ -857,7 +859,332 @@
    * Como na Calculadora de ração: a partir do total da mistura ou da quantidade
    * de um ingrediente. Cada ingrediente = total × (% dele ÷ soma das %).
    */
+
+  const PESO_FORMULA_DEFAULT = { k: 69.3, expC: 2, expL: 1 };
+
+  function obterPesoFormula() {
+    try {
+      const raw = localStorage.getItem('porcos:peso_formula');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.k === 'number' && parsed.k > 0) {
+          return {
+            k: Number(parsed.k) || 69.3,
+            expC: parsed.expC != null && !Number.isNaN(Number(parsed.expC)) ? Number(parsed.expC) : 2,
+            expL: parsed.expL != null && !Number.isNaN(Number(parsed.expL)) ? Number(parsed.expL) : 1,
+          };
+        }
+      }
+    } catch {}
+    return { ...PESO_FORMULA_DEFAULT };
+  }
+
+  function salvarPesoFormula(f) {
+    try {
+      localStorage.setItem('porcos:peso_formula', JSON.stringify(f));
+    } catch {}
+  }
+
+  function obterPesoMedidas() {
+    try {
+      const raw = localStorage.getItem('porcos:peso_medidas');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {}
+    return { cintura: '1,27', comprimento: '1,02', animalId: '' };
+  }
+
+  function salvarPesoMedidas(m) {
+    try {
+      localStorage.setItem('porcos:peso_medidas', JSON.stringify(m));
+    } catch {}
+  }
+
+  function normalizarMedidaMetro(val) {
+    if (val == null || val === '') return null;
+    const s = String(val).trim().replace(/[^\d.,]/g, '').replace(',', '.');
+    const n = parseFloat(s);
+    if (Number.isNaN(n) || n <= 0) return null;
+    // Se digitado em centímetros (ex.: 127 ou 102), converte dividindo por 100
+    if (n >= 10) return n / 100;
+    return n;
+  }
+
+  function calcularPesoEstimado(cinturaM, compM, formula) {
+    const f = formula || obterPesoFormula();
+    const c = normalizarMedidaMetro(cinturaM);
+    const l = normalizarMedidaMetro(compM);
+    if (!c || !l || c <= 0 || l <= 0) return null;
+    const expC = Number(f.expC) != null && !Number.isNaN(Number(f.expC)) ? Number(f.expC) : 2;
+    const expL = Number(f.expL) != null && !Number.isNaN(Number(f.expL)) ? Number(f.expL) : 1;
+    const k = Number(f.k) || 69.3;
+
+    const peso = Math.pow(c, expC) * Math.pow(l, expL) * k;
+    if (!Number.isFinite(peso) || peso <= 0) return null;
+
+    const min3 = peso * 0.97;
+    const max3 = peso * 1.03;
+    const consumoEst = peso * 0.03;
+
+    return { c, l, k, expC, expL, peso, min3, max3, consumoEst };
+  }
+
+  const fmtKg1 = (v) => (v == null || Number.isNaN(v) ? '—' : `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`);
+  const fmtM2 = (v) => (v == null || Number.isNaN(v) ? '—' : `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m`);
+
+  function renderPesoResultadoHtml(res, animalObj) {
+    if (!res) {
+      return `
+        <div class="peso-display-box">
+          <span class="peso-display-label">Peso Corporal Estimado</span>
+          <span class="peso-display-value" style="color: var(--muted); font-size: 2rem;">Preencha as medidas</span>
+          <p class="muted small" style="margin: 4px 0 0;">Informe a cintura e o comprimento para calcular em tempo real.</p>
+        </div>`;
+    }
+
+    const { c, l, k, expC, expL, peso, min3, max3, consumoEst } = res;
+    const cStr = c.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const lStr = l.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const kStr = k.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+
+    let expressaoMath = '';
+    if (expC === 2 && expL === 1) {
+      expressaoMath = `${cStr} × ${cStr} × ${lStr} × ${kStr} = <strong>${fmtKg1(peso)}</strong>`;
+    } else {
+      const parteC = expC === 1 ? cStr : `${cStr}<sup>${expC}</sup>`;
+      const parteL = expL === 1 ? lStr : `${lStr}<sup>${expL}</sup>`;
+      expressaoMath = `${parteC} × ${parteL} × ${kStr} = <strong>${fmtKg1(peso)}</strong>`;
+    }
+
+    // Sugestão de fase da ração
+    const racoes = racoesOrdenadas();
+    let faseSugerida = null;
+    if (racoes.length > 0) {
+      for (const r of racoes) {
+        const nums = (r.faixa || '').match(/\d+/g);
+        if (nums && nums.length >= 2) {
+          const minF = Math.min(...nums.map(Number));
+          const maxF = Math.max(...nums.map(Number));
+          if (peso >= minF && peso <= maxF) {
+            faseSugerida = r;
+            break;
+          }
+        }
+      }
+      if (!faseSugerida) {
+        if (peso < 25) faseSugerida = racoes[0];
+        else if (peso < 60) faseSugerida = racoes[Math.min(1, racoes.length - 1)];
+        else faseSugerida = racoes[racoes.length - 1];
+      }
+    }
+
+    return `
+      <div class="peso-display-box">
+        <span class="peso-display-label">Peso Corporal Estimado</span>
+        <span class="peso-display-value">${fmtKg1(peso)}</span>
+        <div class="peso-display-range">
+          <span>Faixa provável (±3%): <strong>${fmtKg1(min3)}</strong> a <strong>${fmtKg1(max3)}</strong></span>
+        </div>
+      </div>
+
+      <div class="peso-calc-breakdown">
+        <span class="peso-calc-formula-title">Cálculo passo a passo (em tempo real)</span>
+        <div class="peso-calc-math">${expressaoMath}</div>
+        <div class="peso-calc-legend">
+          <span>• <strong>Cintura (C):</strong> ${fmtM2(c)} (${Math.round(c * 100)} cm)${expC !== 1 ? ` com expoente ${expC} = ${(Math.pow(c, expC)).toFixed(4)}` : ''}</span>
+          <span>• <strong>Comprimento (L):</strong> ${fmtM2(l)} (${Math.round(l * 100)} cm)${expL !== 1 ? ` com expoente ${expL} = ${(Math.pow(l, expL)).toFixed(4)}` : ''}</span>
+          <span>• <strong>Constante K:</strong> ${kStr} (fator multiplicador padrão SOS Suínos)</span>
+          <span>• <strong>Margem de erro estimada:</strong> ±3% para animais em estação e postura natural.</span>
+        </div>
+      </div>
+
+      <div class="peso-racao-integration">
+        <div class="peso-racao-info">
+          <div>
+            <strong>Consumo diário estimado (~3% PV):</strong>
+            <span style="font-family: var(--mono); font-weight: 700; margin-left: 4px;">~${fmtKg1(consumoEst)}/dia</span>
+          </div>
+          ${faseSugerida ? `<div><small class="muted">Fase recomendada:</small> <strong>${esc(faseSugerida.fase)}</strong>${faseSugerida.faixa ? ` <small class="muted">(${esc(faseSugerida.faixa)})</small>` : ''}</div>` : ''}
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+          <button type="button" class="btn primary" data-act="peso-aplicar-racao" data-peso="${peso.toFixed(1)}" title="Aplica este peso no cálculo da mistura de ração">
+            ⚖️ Usar ${fmtKg1(peso)} no Cálculo de Ração
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function renderPesoSemBalanca(switcherHtml = '') {
+    const formula = obterPesoFormula();
+    const medidas = obterPesoMedidas();
+    const animalObj = medidas.animalId ? animal(medidas.animalId) : null;
+    const res = calcularPesoEstimado(medidas.cintura, medidas.comprimento, formula);
+
+    const ativos = db.animais.filter((a) => !a.descarte && !a.morte);
+
+    const configPanelHtml = pesoEditandoFormula ? `
+      <div class="peso-config-panel">
+        <div class="peso-config-title">
+          <span>⚙️ Configuração da Fórmula Biométrica</span>
+          <button type="button" class="icon" data-act="peso-cancelar-formula" title="Fechar configuração">✕</button>
+        </div>
+        <p class="muted small" style="margin: 0;">
+          A fórmula padrão da SOS Suínos é: <strong>Peso (kg) = Cintura² × Comprimento × 69,3</strong>.
+          Você pode calibrar o fator K ou os expoentes conforme seu lote.
+        </p>
+        <div class="peso-config-grid">
+          <label class="peso-field">
+            <span>Fator multiplicador (K)</span>
+            <input id="inputPesoK" inputmode="decimal" value="${esc(toInput(formula.k))}">
+          </label>
+          <label class="peso-field">
+            <span>Expoente da Cintura (C)</span>
+            <input id="inputPesoExpC" inputmode="numeric" value="${esc(toInput(formula.expC))}">
+          </label>
+          <label class="peso-field">
+            <span>Expoente do Comprimento (L)</span>
+            <input id="inputPesoExpL" inputmode="numeric" value="${esc(toInput(formula.expL))}">
+          </label>
+        </div>
+        <div class="peso-config-actions">
+          <button type="button" class="btn primary" data-act="peso-salvar-formula">Salvar Fórmula</button>
+          <button type="button" class="btn" data-act="peso-restaurar-formula" title="Volta para K=69,3, C² e L¹">Restaurar padrão (69,3)</button>
+          <button type="button" class="btn ghost" data-act="peso-cancelar-formula">Fechar</button>
+        </div>
+      </div>` : '';
+
+    return `${pageHead('Ração', 'Estimativa de peso biométrico sem balança (SOS Suínos)')}
+      ${switcherHtml}
+      ${configPanelHtml}
+
+      <div class="peso-grid">
+        <!-- Coluna 1: Entradas de medidas e animal -->
+        <div class="peso-card">
+          <div class="peso-card-header">
+            <h2>📏 Medidas do Animal</h2>
+            <button type="button" class="btn ghost small" data-act="peso-toggle-config" title="Ajustar fator K e expoentes da fórmula">
+              ⚙️ ${pesoEditandoFormula ? 'Ocultar Fórmula' : 'Editar Fórmula'}
+            </button>
+          </div>
+
+          <label class="peso-field">
+            <span>Vincular a um animal (opcional)</span>
+            <select id="pesoAnimalSelect">
+              <option value="">-- Animal avulso / Não vinculado --</option>
+              ${ativos.map((a) => `<option value="${esc(a.id)}"${medidas.animalId === a.id ? ' selected' : ''}>${esc(a.brinco || a.nome || 'Sem id')} · ${esc(a.categoria || 'Geral')}${a.lote ? ` (Lote: ${esc(a.lote)})` : ''}</option>`).join('')}
+            </select>
+          </label>
+
+          <div class="peso-field">
+            <label for="pesoCintura">
+              Cintura / Perímetro Torácico (C)
+            </label>
+            <div class="peso-field-input-wrap">
+              <input id="pesoCintura" inputmode="decimal" value="${esc(medidas.cintura || '')}" placeholder="Ex.: 1,27 ou 127" autocomplete="off">
+              <span class="unit">metros (m)</span>
+            </div>
+            <small class="muted">Medir com fita logo atrás das patas dianteiras. Aceita metros (ex: 1,27) ou cm (ex: 127).</small>
+          </div>
+
+          <div class="peso-field">
+            <label for="pesoComprimento">
+              Comprimento (L)
+            </label>
+            <div class="peso-field-input-wrap">
+              <input id="pesoComprimento" inputmode="decimal" value="${esc(medidas.comprimento || '')}" placeholder="Ex.: 1,02 ou 102" autocomplete="off">
+              <span class="unit">metros (m)</span>
+            </div>
+            <small class="muted">Medir da base da orelha até a base do rabo. Aceita metros (ex: 1,02) ou cm (ex: 102).</small>
+          </div>
+
+          <div style="background: var(--surface-2); padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); font-size: 0.85rem;">
+            <strong>Fórmula configurada:</strong>
+            <span style="font-family: var(--mono); color: var(--accent); font-weight: 700; margin-left: 4px;">
+              C<sup>${formula.expC}</sup> × L<sup>${formula.expL}</sup> × ${formula.k.toLocaleString('pt-BR')}
+            </span>
+          </div>
+        </div>
+
+        <!-- Coluna 2: Resultado em tempo real -->
+        <div class="peso-card">
+          <div class="peso-card-header">
+            <h2>⚖️ Resultado Estimado</h2>
+          </div>
+
+          <div id="pesoResultadoBox" style="display: flex; flex-direction: column; gap: 16px;">
+            ${renderPesoResultadoHtml(res, animalObj)}
+          </div>
+        </div>
+      </div>
+
+      <!-- Guia ilustrativo de medição SOS Suínos -->
+      <div class="peso-guia-card">
+        <h3>📖 Como Medir Corretamente (SOS Suínos)</h3>
+        <p class="muted small" style="margin: 0;">
+          Para garantir a máxima precisão da estimativa de peso (margem de erro de ~3%), o animal deve estar em pé, na posição natural, sem curvar as costas.
+        </p>
+        <div class="peso-guia-steps">
+          <div class="peso-guia-step">
+            <div class="peso-guia-num">1</div>
+            <div class="peso-guia-text">
+              <strong>1. Cintura / Perímetro (C)</strong>
+              <p>Passe a fita métrica ou barbante ao redor do corpo do porco, bem justo logo atrás das patas dianteiras (tórax).</p>
+            </div>
+          </div>
+          <div class="peso-guia-step">
+            <div class="peso-guia-num">2</div>
+            <div class="peso-guia-text">
+              <strong>2. Comprimento (L)</strong>
+              <p>Meça sobre a linha do lombo, da base entre as orelhas até o início/base da cauda.</p>
+            </div>
+          </div>
+          <div class="peso-guia-step">
+            <div class="peso-guia-num">3</div>
+            <div class="peso-guia-text">
+              <strong>3. Fórmula SOS Suínos</strong>
+              <p>Multiplica-se C × C × L × 69,3. Exemplo: 1,27 m × 1,27 m × 1,02 m × 69,3 = 114,0 kg.</p>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function atualizarCalculoPeso() {
+    const cEl = $('#pesoCintura');
+    const lEl = $('#pesoComprimento');
+    const animEl = $('#pesoAnimalSelect');
+    if (!cEl || !lEl) return;
+
+    const medidas = {
+      cintura: cEl.value,
+      comprimento: lEl.value,
+      animalId: animEl ? animEl.value : '',
+    };
+    salvarPesoMedidas(medidas);
+
+    const formula = obterPesoFormula();
+    const res = calcularPesoEstimado(medidas.cintura, medidas.comprimento, formula);
+    const box = $('#pesoResultadoBox');
+    if (box) {
+      box.innerHTML = renderPesoResultadoHtml(res, medidas.animalId ? animal(medidas.animalId) : null);
+    }
+  }
+
   function renderRacao() {
+    const switcherHtml = `
+      <div class="view-switch-bar">
+        <div class="seg" role="group" aria-label="Visão da aba Ração">
+          <button type="button" class="${racaoAba === 'racao' ? 'on' : ''}" aria-pressed="${racaoAba === 'racao'}" data-act="racao-aba" data-value="racao">Cálculo de Ração</button>
+          <button type="button" class="${racaoAba === 'peso' ? 'on' : ''}" aria-pressed="${racaoAba === 'peso'}" data-act="racao-aba" data-value="peso">⚖️ Peso sem Balança</button>
+        </div>
+      </div>`;
+
+    if (racaoAba === 'peso') {
+      return renderPesoSemBalanca(switcherHtml);
+    }
+
     const nomes = ingredientesRacao();
     if (!nomes.includes(racaoIng)) racaoIng = nomes.includes('Milho') ? 'Milho' : nomes[0] || '';
     const porIngrediente = racaoModo === 'ingrediente' && !!racaoIng;
@@ -887,6 +1214,7 @@
 
     return `${pageHead('Ração', 'Quanto vai de cada ingrediente em cada fase',
       editBtn(`<button type="button" class="btn" data-act="racao-new">${ICON.plus} Fase</button>`))}
+      ${switcherHtml}
       <div class="calc-bar card">
         <div class="calc-field"><span class="calc-label">Calcular a partir de</span>
           <div class="seg" role="group" aria-label="Calcular a partir de">
@@ -3728,6 +4056,44 @@
     'racao-new': () => formRacao(null),
     'racao-edit': (el) => formRacao(byId('racoes', el.dataset.id)),
     'racao-modo': (el) => { racaoModo = el.dataset.value; render(); },
+    'racao-aba': (el) => { racaoAba = el.dataset.value; render(); },
+    'peso-toggle-config': () => { pesoEditandoFormula = !pesoEditandoFormula; render(); },
+    'peso-salvar-formula': () => {
+      const kEl = $('#inputPesoK');
+      const cEl = $('#inputPesoExpC');
+      const lEl = $('#inputPesoExpL');
+      const k = kEl ? parseNum(kEl.value) : 69.3;
+      const expC = cEl ? parseNum(cEl.value) : 2;
+      const expL = lEl ? parseNum(lEl.value) : 1;
+      if (k == null || Number.isNaN(k) || k <= 0) {
+        toast('Digite um valor válido para a constante K (ex.: 69,3).');
+        return;
+      }
+      salvarPesoFormula({ k, expC: expC != null ? expC : 2, expL: expL != null ? expL : 1 });
+      pesoEditandoFormula = false;
+      toast(`Fórmula atualizada: K = ${k.toLocaleString('pt-BR')}`);
+      render();
+    },
+    'peso-restaurar-formula': () => {
+      salvarPesoFormula({ ...PESO_FORMULA_DEFAULT });
+      pesoEditandoFormula = false;
+      toast('Fórmula restaurada para o padrão (69,3)!');
+      render();
+    },
+    'peso-cancelar-formula': () => {
+      pesoEditandoFormula = false;
+      render();
+    },
+    'peso-aplicar-racao': (el) => {
+      const pesoNum = parseFloat(el.dataset.peso);
+      if (pesoNum && !Number.isNaN(pesoNum)) {
+        racaoQtd = Math.round(pesoNum);
+        racaoModo = 'total';
+        racaoAba = 'racao';
+        toast(`Definido ${racaoQtd} kg no Total da Mistura de Ração`);
+        render();
+      }
+    },
     bloco: (el) => toggleBloco(el),
     'saude-animais': (el) => setSaude('animais', el.dataset.value),
     foto: (el) => { fotoAlvo = el.dataset.id; $('#fotoInput').click(); },
@@ -3849,6 +4215,10 @@
   });
 
   view.addEventListener('change', async (e) => {
+    if (e.target.id === 'pesoAnimalSelect') {
+      atualizarCalculoPeso();
+      return;
+    }
     if (e.target.id === 'racaoIng') {
       racaoIng = e.target.value;
       render();
@@ -3872,6 +4242,10 @@
   });
 
   view.addEventListener('input', (e) => {
+    if (e.target.id === 'pesoCintura' || e.target.id === 'pesoComprimento') {
+      atualizarCalculoPeso();
+      return;
+    }
     if (e.target.id === 'buscaDnp') {
       buscaDnp = e.target.value;
       filtrarDnp();
