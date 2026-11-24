@@ -199,7 +199,7 @@ create policy "Dono gerencia convites" on public.porcos_convites
 create table if not exists public.porcos_animais (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  categoria text not null check (categoria in ('matriz', 'barrao', 'porca', 'porco')),
+  categoria text not null check (categoria in ('matriz', 'barrao', 'marra', 'cevado', 'porca', 'porco')),
   nascimento date,
   chegada date,
   aquisicao text not null default 'nascido' check (aquisicao in ('nascido', 'comprado', 'ganhado')),
@@ -340,6 +340,8 @@ alter table public.porcos_gestacoes add column if not exists desmame date;
 alter table public.porcos_gestacoes add column if not exists aborto boolean default false;
 alter table public.porcos_gestacoes add column if not exists aborto_data date;
 alter table public.porcos_gestacoes add column if not exists repeticao_cio boolean default false;
+alter table public.porcos_animais drop constraint if exists porcos_animais_categoria_check;
+alter table public.porcos_animais add constraint porcos_animais_categoria_check check (categoria in ('matriz', 'barrao', 'marra', 'cevado', 'porca', 'porco'));
 
 -- Índices de grupo
 create index if not exists porcos_animais_grupo_idx on public.porcos_animais (grupo_id);

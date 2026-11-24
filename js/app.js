@@ -27,9 +27,15 @@
   const view = $('#view');
   const CFG = window.APP_CONFIG || {};
 
-  const CATEGORIAS = { matriz: 'Matriz', barrao: 'Barrão', porca: 'Porca', porco: 'Porco' };
-  const CATEGORIAS_PLURAL = { matriz: 'matrizes', barrao: 'barrões', porca: 'porcas', porco: 'porcos' };
-  const FEMININO = { matriz: true, porca: true };
+  const CATEGORIAS = { matriz: 'Matriz', barrao: 'Barrão', marra: 'Marrã', cevado: 'Cevado', porca: 'Marrã', porco: 'Cevado' };
+  const CATEGORIAS_PLURAL = { matriz: 'matrizes', barrao: 'barrões', marra: 'marrãs', cevado: 'cevados', porca: 'marrãs', porco: 'cevados' };
+  const FEMININO = { matriz: true, marra: true, porca: true };
+  const CATEGORIAS_FORM = [
+    ['matriz', 'Matriz'],
+    ['barrao', 'Barrão'],
+    ['marra', 'Marrã'],
+    ['cevado', 'Cevado'],
+  ];
   const AQUISICAO = { nascido: 'Nascido no local', comprado: 'Comprado', ganhado: 'Ganhado' };
   const SAIDAS = { venda: ['Vendido', 'Vendida'], abate: ['Abatido', 'Abatida'], morte: ['Morto', 'Morta'] };
   const SAIDA_FILTRO = { venda: 'Vendidos', abate: 'Abatidos', morte: 'Mortos' };
@@ -63,6 +69,7 @@
     download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10.5l5 5 5-5"/><path d="M5 19.5h14"/></svg>',
     upload: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
     file: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+    fileText: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
     trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
     external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
     eye: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
@@ -249,10 +256,11 @@
 
   function onRoute() {
     const parts = location.hash.replace(/^#\/?/, '').split('/');
-    const name = parts[0] || 'inicio';
+    let name = parts[0] || 'inicio';
+    if (name === 'documentos') name = 'sos';
     current = { name, id: parts[1] ? decodeURIComponent(parts[1]) : null };
-    const nav = name === 'animal' ? 'animais' : name;
-    $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.route === nav));
+    const nav = name === 'animal' ? 'animais' : (name === 'sos' ? 'documentos' : name);
+    $$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.route === nav || (nav === 'documentos' && a.dataset.route === 'sos')));
     render();
     window.scrollTo(0, 0);
   }
@@ -270,6 +278,7 @@
       racao: renderRacao,
       financas: renderFinancas,
       sos: renderSos,
+      documentos: renderSos,
       conta: renderConta,
     };
     view.innerHTML = banners() + (pages[current.name] || renderInicio)();
@@ -351,8 +360,12 @@
 
   function resumoPlantel(list) {
     const n = {};
-    list.forEach((a) => { n[a.categoria] = (n[a.categoria] || 0) + 1; });
-    return Object.keys(CATEGORIAS).filter((c) => n[c]).map((c) => `${n[c]} ${n[c] === 1 ? CATEGORIAS[c].toLowerCase() : CATEGORIAS_PLURAL[c]}`).join(' · ');
+    list.forEach((a) => {
+      const c = (a.categoria === 'porca' ? 'marra' : (a.categoria === 'porco' ? 'cevado' : a.categoria));
+      n[c] = (n[c] || 0) + 1;
+    });
+    const order = ['matriz', 'barrao', 'marra', 'cevado'];
+    return order.filter((c) => n[c]).map((c) => `${n[c]} ${n[c] === 1 ? CATEGORIAS[c].toLowerCase() : CATEGORIAS_PLURAL[c]}`).join(' · ');
   }
 
   function totaisFinancas(lancs) {
@@ -569,7 +582,7 @@
       { extra: editBtn(`<button type="button" class="btn small" data-act="abate-edit" data-id="${abate.id}">${ICON.edit} Editar</button>`) }) : '';
 
     let dnpSecHtml = '';
-    if (a.categoria === 'matriz' || a.categoria === 'porca') {
+    if (a.categoria === 'matriz' || a.categoria === 'marra' || a.categoria === 'porca') {
       const d = calcularDnpMatriz(a);
       const custo = obterDnpCusto();
       dnpSecHtml = `<section class="section card">
@@ -688,7 +701,6 @@
       linhas.push(['Situação', 'Repetição de cio (cobertura não vingou)']);
     } else {
       linhas.push([nascida || g.parto ? 'Parto' : 'Parto previsto', fmtDate(parto)]);
-      if (g.desmame) linhas.push(['Desmame', fmtDate(g.desmame)]);
       if (nascida) {
         linhas.push(['Duração', plural(diffDays(g.cruzamento, parto), 'dia', 'dias')]);
         linhas.push(['Nascidos', String(nascidosDe(g))]);
@@ -696,6 +708,17 @@
         linhas.push(['Mortos', g.mortos != null ? String(g.mortos) : '—']);
         if (g.machos != null || g.femeas != null) linhas.push(['Machos / fêmeas', `${g.machos ?? '—'} / ${g.femeas ?? '—'}`]);
         linhas.push(['Capação', fmtDate(g.capacao)]);
+      }
+      if (g.desmame) {
+        linhas.push(['Desmame', fmtDate(g.desmame)]);
+        if (parto) {
+          const idadeDesmame = diffDays(parto, g.desmame);
+          linhas.push(['Idade no desmame', idadeDesmame >= 0 ? plural(idadeDesmame, 'dia', 'dias') : '—']);
+        }
+      } else if (parto) {
+        const desmamePrevisto = addDays(parto, 28);
+        linhas.push(['Desmame previsto', fmtDate(desmamePrevisto)]);
+        linhas.push(['Idade no desmame', '28 dias (previsto)']);
       }
     }
     return `<article class="cria card">
@@ -1519,7 +1542,7 @@
 
     // Dropzone card
     const dropzoneHtml = canEdit() ? `
-      <div class="sos-dropzone card" id="sosDropzone" tabindex="0" role="button" aria-label="Enviar novo arquivo para SOS Suínos" data-act="sos-novo">
+      <div class="sos-dropzone card" id="sosDropzone" tabindex="0" role="button" aria-label="Enviar novo arquivo para Documentos" data-act="sos-novo">
         <div class="sos-dropzone-icon">${ICON.upload}</div>
         <div class="sos-dropzone-text">
           <strong>Clique para selecionar ou arraste arquivos aqui</strong>
@@ -1564,7 +1587,7 @@
     if (!lista.length) {
       if (totalArquivos === 0) {
         docsHtml = `<div class="card empty-box" style="padding: 32px 20px; text-align: center; flex-direction: column; gap: 12px; justify-content: center;">
-          <div style="font-size: 2.2rem; color: var(--accent);">${ICON.sos}</div>
+          <div style="font-size: 2.2rem; color: var(--accent);">${ICON.fileText}</div>
           <div>
             <h3 style="font-size: 1.15rem; margin-bottom: 4px;">Nenhum arquivo enviado ainda</h3>
             <p class="muted" style="max-width: 480px; margin: 0 auto 16px;">Guarde aqui cartilhas sanitárias, manuais da Embrapa e ABCS, fotos de exames, receitas veterinárias e tabelas de apoio à criação de suínos.</p>
@@ -1581,7 +1604,7 @@
     }
 
     return `
-      ${pageHead('SOS Suínos', 'Manuais técnicos, laudos, cartilhas, bulas e arquivos de apoio ao manejo', canEdit() ? `<button type="button" class="btn primary" data-act="sos-novo">${ICON.plus} Enviar arquivo</button>` : '')}
+      ${pageHead('Documentos', 'Manuais técnicos, laudos, cartilhas, bulas e arquivos de apoio ao manejo', canEdit() ? `<button type="button" class="btn primary" data-act="sos-novo">${ICON.plus} Enviar arquivo</button>` : '')}
       ${statsHtml}
       ${dropzoneHtml}
       ${chipsHtml}
@@ -1796,7 +1819,7 @@
   }
 
   function calcularDnpPlantel() {
-    const femeas = sortAnimais(db.animais.filter((a) => a.categoria === 'matriz' || a.categoria === 'porca'));
+    const femeas = sortAnimais(db.animais.filter((a) => a.categoria === 'matriz' || a.categoria === 'marra' || a.categoria === 'porca'));
     const matrizesDnp = femeas.map(calcularDnpMatriz);
     const totalDnp = matrizesDnp.reduce((s, d) => s + d.totalDnp, 0);
     const matrizesNoPlantel = matrizesDnp.filter((d) => noPlantel(d.animal));
@@ -2699,10 +2722,10 @@
     const gestacoes = sortByDate(db.gestacoes.filter((g) => g.vivos != null && (!a || g.matriz_id !== a.id)), 'parto', true);
     openForm({
       title: novo ? 'Novo animal' : `Editar ${a.nome}`,
-      values: a ? { ...a, saida: a.saida || '', descarte: !!a.descarte, descarte_data: a.descarte_data || '' } : { categoria: 'porco', aquisicao: 'nascido', saida: '', descarte: false, descarte_data: '' },
+      values: a ? { ...a, saida: a.saida || '', descarte: !!a.descarte, descarte_data: a.descarte_data || '' } : { categoria: 'cevado', aquisicao: 'nascido', saida: '', descarte: false, descarte_data: '' },
       fields: [
         { name: 'nome', label: 'Nome', required: true, placeholder: 'Ex.: Pintada' },
-        { name: 'categoria', label: 'Categoria', type: 'select', half: true, options: Object.entries(CATEGORIAS) },
+        { name: 'categoria', label: 'Categoria', type: 'select', half: true, options: CATEGORIAS_FORM },
         { name: 'aquisicao', label: 'Aquisição', type: 'select', half: true, options: Object.entries(AQUISICAO) },
         { name: 'nascimento', label: 'Nascimento', type: 'date', half: true },
         { name: 'gestacao_id', label: 'Cria da gestação', type: 'select', hint: ' ',
@@ -2710,8 +2733,8 @@
         { name: 'chegada', label: 'Chegada', type: 'date', half: true, showIf: (v) => v.aquisicao !== 'nascido' },
         { name: 'negociado_com', label: 'Negociado com', half: true, showIf: (v) => v.aquisicao !== 'nascido', placeholder: 'Pessoa' },
         { name: 'valor_compra', label: 'Valor de compra', type: 'money', half: true, showIf: (v) => v.aquisicao === 'comprado' },
-        { name: 'descarte', label: 'Marcada para descarte (gera DNP até a saída física)', type: 'checkbox', showIf: (v) => v.categoria === 'matriz' || v.categoria === 'porca' },
-        { name: 'descarte_data', label: 'Data da decisão de descarte', type: 'date', half: true, showIf: (v) => (v.categoria === 'matriz' || v.categoria === 'porca') && !!v.descarte },
+        { name: 'descarte', label: 'Marcada para descarte (gera DNP até a saída física)', type: 'checkbox', showIf: (v) => v.categoria === 'matriz' || v.categoria === 'marra' || v.categoria === 'porca' },
+        { name: 'descarte_data', label: 'Data da decisão de descarte', type: 'date', half: true, showIf: (v) => (v.categoria === 'matriz' || v.categoria === 'marra' || v.categoria === 'porca') && !!v.descarte },
         { name: 'saida', label: 'Situação', type: 'select', options: [['', 'No plantel'], ['venda', 'Vendido'], ['abate', 'Abatido'], ['morte', 'Morreu']] },
         { name: 'saida_data', label: 'Data da saída', type: 'date', half: true, required: true, showIf: (v) => !!v.saida },
         { name: 'valor_venda', label: 'Valor da venda', type: 'money', half: true, showIf: (v) => v.saida === 'venda' },
@@ -3306,7 +3329,7 @@
     else if (/nota|comprovante|recibo|pagamento|custo/i.test(n)) catSugerida = 'financeiro';
 
     openForm({
-      title: 'Enviar arquivo para SOS Suínos',
+      title: 'Enviar documento',
       intro: `Arquivo selecionado: <strong>${esc(file.name)}</strong> (${esc(fmtBytes(file.size))})`,
       values: {
         titulo: tituloSugerido,
@@ -3718,7 +3741,7 @@
       { nome: 'Lançamentos', linhas: lancamentos, dinheiro: ['Valor'] },
       { nome: 'Por mês', linhas: porMes, dinheiro: ['Soro', 'Ração', 'Outras', 'Receitas', 'Saldo'] },
       { nome: 'Ração', linhas: racao },
-      { nome: 'SOS Suínos', linhas: docsExcel },
+      { nome: 'Documentos', linhas: docsExcel },
     ];
   }
 
@@ -3927,7 +3950,7 @@
     progresso('Gravando gestações…');
     await Cloud.upsertMany('gestacoes', novos.gestacoes);
     await Cloud.upsertMany('animais', novos.animais);
-    for (const [kind, nome] of [['aplicacoes', 'aplicações'], ['abates', 'abates'], ['lancamentos', 'lançamentos'], ['racoes', 'ração'], ['documentos', 'SOS Suínos (arquivos)']]) {
+    for (const [kind, nome] of [['aplicacoes', 'aplicações'], ['abates', 'abates'], ['lancamentos', 'lançamentos'], ['racoes', 'ração'], ['documentos', 'Documentos (arquivos)']]) {
       progresso(`Gravando ${nome}…`);
       await Cloud.upsertMany(kind, novos[kind]);
     }
@@ -3952,7 +3975,7 @@
     const { dados, arquivos } = copia;
     const linhas = Object.entries(Cloud.TABLES).map(([kind, tabela]) => {
       const nCopia = Array.isArray(dados.tabelas[tabela]) ? dados.tabelas[tabela].length : 0;
-      const nomes = { animais: 'Animais', gestacoes: 'Gestações', produtos: 'Vacinas e remédios', aplicacoes: 'Aplicações', abates: 'Abates', lancamentos: 'Lançamentos', racoes: 'Fases de ração', documentos: 'SOS Suínos' };
+      const nomes = { animais: 'Animais', gestacoes: 'Gestações', produtos: 'Vacinas e remédios', aplicacoes: 'Aplicações', abates: 'Abates', lancamentos: 'Lançamentos', racoes: 'Fases de ração', documentos: 'Documentos' };
       return `<tr><th scope="row">${nomes[kind]}</th><td class="num">${db[kind].length}</td><td class="num"><strong>${nCopia}</strong></td></tr>`;
     }).join('');
     const quando = dados.exportado_em ? new Date(dados.exportado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '?';

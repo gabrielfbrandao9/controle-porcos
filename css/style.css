@@ -14,6 +14,8 @@
   --danger: #b42318;   --danger-bg: #fde6e3;
   --c-matriz: #9c4a32; --c-matriz-bg: #f6e3da;
   --c-barrao: #3d5a80; --c-barrao-bg: #e1e9f4;
+  --c-marra: #a8426a;  --c-marra-bg: #f8e1ea;
+  --c-cevado: #5c7629; --c-cevado-bg: #e8efd9;
   --c-porca: #a8426a;  --c-porca-bg: #f8e1ea;
   --c-porco: #5c7629;  --c-porco-bg: #e8efd9;
   --radius: 14px;
@@ -42,6 +44,8 @@
     --danger: #f87171;   --danger-bg: #250a0a;
     --c-matriz: #f06a38; --c-matriz-bg: #1f0b05;
     --c-barrao: #60a5fa; --c-barrao-bg: #081525;
+    --c-marra: #f472b6;  --c-marra-bg: #210816;
+    --c-cevado: #a3e635; --c-cevado-bg: #132004;
     --c-porca: #f472b6;  --c-porca-bg: #210816;
     --c-porco: #a3e635;  --c-porco-bg: #132004;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
@@ -66,6 +70,8 @@
   --danger: #f87171;   --danger-bg: #250a0a;
   --c-matriz: #f06a38; --c-matriz-bg: #1f0b05;
   --c-barrao: #60a5fa; --c-barrao-bg: #081525;
+  --c-marra: #f472b6;  --c-marra-bg: #210816;
+  --c-cevado: #a3e635; --c-cevado-bg: #132004;
   --c-porca: #f472b6;  --c-porca-bg: #210816;
   --c-porco: #a3e635;  --c-porco-bg: #132004;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
@@ -318,8 +324,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .badge.danger { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
 .badge.cat-matriz { background: var(--c-matriz-bg); color: var(--c-matriz); border-color: transparent; }
 .badge.cat-barrao { background: var(--c-barrao-bg); color: var(--c-barrao); border-color: transparent; }
-.badge.cat-porca { background: var(--c-porca-bg); color: var(--c-porca); border-color: transparent; }
-.badge.cat-porco { background: var(--c-porco-bg); color: var(--c-porco); border-color: transparent; }
+.badge.cat-marra, .badge.cat-porca { background: var(--c-marra-bg); color: var(--c-marra); border-color: transparent; }
+.badge.cat-cevado, .badge.cat-porco { background: var(--c-cevado-bg); color: var(--c-cevado); border-color: transparent; }
 
 /* ---------- Fotos e animais ---------- */
 
@@ -329,8 +335,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .foto.empty svg { width: 34%; height: 60%; stroke-width: 1.6; }
 .foto.cat-matriz { background: var(--c-matriz-bg); color: var(--c-matriz); }
 .foto.cat-barrao { background: var(--c-barrao-bg); color: var(--c-barrao); }
-.foto.cat-porca { background: var(--c-porca-bg); color: var(--c-porca); }
-.foto.cat-porco { background: var(--c-porco-bg); color: var(--c-porco); }
+.foto.cat-marra, .foto.cat-porca { background: var(--c-marra-bg); color: var(--c-marra); }
+.foto.cat-cevado, .foto.cat-porco { background: var(--c-cevado-bg); color: var(--c-cevado); }
 /* Fotos grandes em 16:9 (o formato das fotos do celular deitado) */
 .foto.large { width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 12px 12px 0 0; }
 .foto.large.empty svg { width: 26%; height: 26%; }
